@@ -4,6 +4,8 @@
 !LICENSE
 !.gitignore
 !CNAME
+!guide/
+!guide/**
 
 # wrangler files
 .wrangler

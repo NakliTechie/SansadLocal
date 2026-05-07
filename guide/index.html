@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Chirag Patnaik">
+<title>SansadLocal — User guide</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f5efe2'/%3E%3Cpath d='M6 24h20M8 24V14M12 24V14M16 24V14M20 24V14M24 24V14M5 14h22L16 6z' stroke='%23cc5500' stroke-width='1.6' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg:        #f5efe2;
+  --surface:   #ffffff;
+  --surface2:  #faf3df;
+  --surface3:  #f0e6ce;
+  --border:    #d4c89a;
+  --text:      #2a1f10;
+  --muted:     #7a6440;
+  --accent:    #cc5500;
+  --accent-hi: #e07028;
+  --accent-bg: #fdf3e8;
+  --green:     #138838;
+  --green-bg:  #e0f0e0;
+  --navy:      #15294a;
+  --info-bg:   #e6ecf5;
+  --amber:     #b87000;
+  --amber-bg:  #fcefcc;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.65;
+  padding: 24px 16px 80px;
+}
+.container { max-width: 760px; margin: 0 auto; }
+h1 {
+  font-size: 2rem;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+h1 + p.lede { font-size: 1.05rem; color: var(--muted); margin-bottom: 28px; }
+h2 {
+  font-size: 1.35rem;
+  margin: 36px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--border);
+  color: var(--text);
+}
+h3 { font-size: 1.05rem; margin: 22px 0 8px; color: var(--accent); }
+p, ul, ol, table { margin-bottom: 14px; }
+ul, ol { padding-left: 22px; }
+li { margin-bottom: 4px; }
+code {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+a { color: var(--accent); }
+a:hover { text-decoration: underline; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+th, td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th { background: var(--surface2); font-weight: 600; }
+
+.callout {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin: 14px 0;
+  font-size: 0.92rem;
+}
+.callout.tip { border-left-color: var(--green); background: var(--green-bg); }
+.callout.warn { border-left-color: var(--amber); background: var(--amber-bg); }
+
+.toc {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin-bottom: 28px;
+}
+.toc h3 { margin: 0 0 8px; color: var(--text); font-size: 0.92rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.toc ol { margin: 0; padding-left: 20px; }
+.toc li { margin-bottom: 2px; font-size: 0.92rem; }
+
+/* Mock UI components — inline visual reference for the guide */
+.mock {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  margin: 14px 0;
+  font-size: 0.86rem;
+}
+.mock-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 14px 0;
+}
+.mock-header .brand { font-weight: 800; color: var(--accent); }
+.mock-header .tag { font-size: 0.78rem; color: var(--muted); }
+.mock-header .spacer { flex: 1; }
+.mock-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; font-size: 0.78rem; border-radius: 14px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted);
+}
+.mock-pill.ready { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+.mock-pill.api   { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+.mock-pill.loading { background: var(--amber-bg); color: var(--amber); border-color: var(--amber); }
+.mock-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.mock-icon-btn {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1.5px solid var(--border); background: var(--surface);
+  color: var(--muted); display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; font-weight: 600;
+}
+.mock-tabs { display: flex; gap: 14px; margin-top: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.mock-tab { font-size: 0.85rem; color: var(--muted); padding-bottom: 4px; }
+.mock-tab.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+.mock-cat {
+  display: inline-block; font-size: 0.72rem; padding: 2px 8px;
+  border-radius: 10px; font-weight: 600; letter-spacing: 0.04em;
+  border: 1px solid;
+}
+.cat-DFG { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+.cat-AT  { background: var(--info-bg); color: var(--navy); border-color: var(--navy); }
+.cat-SUBJ{ background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+
+.kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82em;
+  background: var(--surface);
+}
+
+.flow {
+  margin: 14px 0;
+  padding-left: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.flow li {
+  position: relative;
+  padding-left: 36px;
+  margin-bottom: 14px;
+  counter-increment: step;
+}
+.flow li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0; top: 0;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.78rem;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.footer-back {
+  margin-top: 50px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.footer-back a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<p style="margin-bottom: 18px"><a href="../">← Back to SansadLocal</a></p>
+
+<h1>SansadLocal — User guide</h1>
+<p class="lede">A quick tour of every feature, how to set up AI, how the privacy model works, and what costs (if any) come with each option.</p>
+
+<div class="toc">
+  <h3>On this page</h3>
+  <ol>
+    <li><a href="#overview">What is SansadLocal?</a></li>
+    <li><a href="#interface">The interface at a glance</a></li>
+    <li><a href="#browse">Browse, search, filter</a></li>
+    <li><a href="#report">Reading a report</a></li>
+    <li><a href="#ai-setup">Setting up AI</a></li>
+    <li><a href="#summary">Generating an AI summary</a></li>
+    <li><a href="#ask">Asking questions about a report</a></li>
+    <li><a href="#search-enrich">Web-search enrichment for Ask</a></li>
+    <li><a href="#export">Exporting metadata and summaries</a></li>
+    <li><a href="#batch">Batch-summarising a committee</a></li>
+    <li><a href="#privacy">Privacy &amp; what's cached locally</a></li>
+    <li><a href="#costs">Costs &amp; limits — what's free, what isn't</a></li>
+    <li><a href="#troubleshooting">Troubleshooting</a></li>
+  </ol>
+</div>
+
+<h2 id="overview">1. What is SansadLocal?</h2>
+<p>A single-file browser app that surfaces every report from India's 24 Departmentally Related Standing Committees (DRSCs) — 16 chaired by the Lok Sabha, 8 by the Rajya Sabha. Reports are scraped daily from <a href="https://sansad.in" target="_blank" rel="noopener">sansad.in</a> by an open-source GitHub Action and mirrored as static JSON on GitHub Pages. The app you're using runs entirely in your browser — there is no SansadLocal server, no account, no analytics.</p>
+<p>Three things make it different from the upstream <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank" rel="noopener">ParliamentWatch</a> (whose Python scraper powers the data mirror):</p>
+<ul>
+  <li>It runs as a single HTML file — no Python, no install, no terminal.</li>
+  <li>AI summaries and Q&amp;A can run on your device (Gemma / Ternary Bonsai over WebGPU) — no API key required.</li>
+  <li>If you want a stronger model, you can plug in your own API key (Anthropic, OpenAI, Gemini, Groq, OpenRouter, Ollama, or any OpenAI-compatible endpoint).</li>
+</ul>
+
+<h2 id="interface">2. The interface at a glance</h2>
+<p>The header runs across the top:</p>
+<div class="mock-header">
+  <span class="brand">SansadLocal</span>
+  <span class="tag">Indian Parliamentary Committee Reports</span>
+  <span class="spacer"></span>
+  <span style="font-size:0.78rem; color:var(--muted)"><b>2671</b> reports · <b>24</b> committees · <b>72</b> with text</span>
+  <span class="mock-pill"><span class="dot"></span>AI off</span>
+  <span class="mock-icon-btn">⚙</span>
+  <span class="mock-icon-btn">?</span>
+</div>
+<ul>
+  <li><b>Stats</b> tell you how many reports the mirror has, how many committees, and how many have full extracted text yet.</li>
+  <li><b>AI status pill</b> tells you what AI is configured. Click it to jump to Settings.
+    <ul>
+      <li><span class="mock-pill"><span class="dot"></span>AI off</span> — nothing configured yet</li>
+      <li><span class="mock-pill loading"><span class="dot"></span>Loading model…</span> — local model downloading or warming up</li>
+      <li><span class="mock-pill ready"><span class="dot"></span>Gemma 4 E2B ready</span> — local model ready to use</li>
+      <li><span class="mock-pill api"><span class="dot"></span>BYOK: Anthropic</span> — your API key configured</li>
+    </ul>
+  </li>
+  <li><b>Settings</b> (<span class="kbd">⚙</span>) — pick the AI mode, load a model, configure web search.</li>
+  <li><b>Help</b> (<span class="kbd">?</span>) — what you're reading is the long-form version of that modal.</li>
+</ul>
+
+<h2 id="browse">3. Browse, search, filter</h2>
+<p>Below the header, a row of filters narrows the list:</p>
+<ol>
+  <li><b>Search</b> — substring match against titles. After the app's background indexer finishes (you'll see <em>"Full-text search ready (N reports)"</em> in the status line), search also matches against body content of every extracted PDF.</li>
+  <li><b>All committees</b> — narrow to one of the 24 DRSCs.</li>
+  <li><b>All Lok Sabhas</b> — most data is currently from LS18; older terms backfill over time.</li>
+  <li><b>All categories</b> — auto-tagged from titles:
+    <span class="mock-cat cat-DFG">DFG</span> Demand for Grants ·
+    <span class="mock-cat cat-AT">AT</span> Action Taken ·
+    <span class="mock-cat cat-SUBJ">SUBJ</span> Subject reports
+    (BILL and ASSURE also exist).
+  </li>
+  <li><b>Sort</b> — newest first by default.</li>
+</ol>
+<p>Each row also carries a status badge on the right:</p>
+<ul>
+  <li><span class="mock-pill" style="font-size:0.7rem; padding:2px 7px">metadata</span> — only metadata is published; no extracted text yet.</li>
+  <li><span class="mock-pill ready" style="font-size:0.7rem; padding:2px 7px">text</span> — full text has been extracted by the mirror and is searchable.</li>
+  <li><span class="mock-pill api" style="font-size:0.7rem; padding:2px 7px">summary</span> — you've generated an AI summary that's cached in your browser.</li>
+</ul>
+
+<h2 id="report">4. Reading a report</h2>
+<p>Click any row to open a four-tab dialog:</p>
+<div class="mock-tabs">
+  <span class="mock-tab active">Details</span>
+  <span class="mock-tab">Full text</span>
+  <span class="mock-tab">AI summary</span>
+  <span class="mock-tab">Ask</span>
+</div>
+<ul>
+  <li><b>Details</b> — committee, report number, dates, links to the English and Hindi PDFs on sansad.in, source attribution.</li>
+  <li><b>Full text</b> — the extracted text from the PDF (when available). Searchable, scrollable.</li>
+  <li><b>AI summary</b> — generate a plain-English briefing of the report. Cached in your browser after the first run.</li>
+  <li><b>Ask</b> — chat with the report. The model answers based on the report's text (and your cached summary, when one exists).</li>
+</ul>
+<div class="callout">If a report shows <em>"Full text has not yet been extracted"</em>, it means the mirror's daily action hasn't gotten to it yet. Open the PDF directly via the Details tab in the meantime.</div>
+
+<h2 id="ai-setup">5. Setting up AI</h2>
+<p>Click the <span class="kbd">⚙</span> Settings icon in the header (or the AI status pill). Pick one of two modes:</p>
+
+<h3>Option A — Local AI (default, no key, free)</h3>
+<p>Runs an open-weight model entirely in your browser via <a href="https://huggingface.co/docs/transformers.js" target="_blank">Transformers.js</a> on WebGPU. The first load downloads weights from Hugging Face; the browser caches them so subsequent visits are instant.</p>
+<table>
+  <thead><tr><th>Model</th><th>Size</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Gemma 4 E2B</td><td>~1.5 GB</td><td>Default. Good balance of quality and download size.</td></tr>
+    <tr><td>Gemma 4 E4B</td><td>~4.9 GB</td><td>Stronger summaries; takes longer to download and longer per response.</td></tr>
+    <tr><td>Ternary Bonsai 1.7B</td><td>~470 MB</td><td>Smallest download. Good for low-bandwidth or quick trials.</td></tr>
+    <tr><td>Ternary Bonsai 4B</td><td>~1.1 GB</td><td>Sweet spot for quality vs. size on the Bonsai line.</td></tr>
+    <tr><td>Ternary Bonsai 8B</td><td>~2.2 GB</td><td>Strongest Bonsai option. Needs a recent GPU; 64K context.</td></tr>
+  </tbody>
+</table>
+<ol class="flow">
+  <li>Open Settings. AI mode = <em>Local AI</em>.</li>
+  <li>Pick a model from the dropdown.</li>
+  <li>Click <b>Load</b>. First run shows a progress bar — your machine is downloading weights from Hugging Face.</li>
+  <li>When the status pill says <em>"&lt;model&gt; ready"</em>, you can use AI summary and Ask in any report dialog.</li>
+</ol>
+<div class="callout tip"><b>Auto-load on return visits.</b> Once a model is cached, the next time you load SansadLocal it auto-loads in the background — no need to click Load again.</div>
+<div class="callout warn"><b>Requirements.</b> WebGPU is needed. Recent Chrome / Edge / Brave (113+), Firefox 130+ on a recent device. If your browser doesn't support WebGPU the local-AI option is disabled and you'll see "No WebGPU" in the pill — switch to BYOK mode.</div>
+
+<h3>Option B — BYOK (Bring Your Own Key)</h3>
+<p>Send the request directly from your browser to the provider you choose. Your key stays in this browser's <code>localStorage</code> — never sent to any other server.</p>
+<ol class="flow">
+  <li>Open Settings. AI mode = <em>BYOK</em>.</li>
+  <li>Pick a provider. Get a key from the provider's website (links in the table at <a href="#costs">§12 Costs &amp; limits</a>).</li>
+  <li>Paste the key into the API key field. Optionally override the default model.</li>
+  <li>Click <b>Save</b>. The pill turns to <em>"BYOK: &lt;Provider&gt;"</em>.</li>
+</ol>
+
+<h2 id="summary">6. Generating an AI summary</h2>
+<ol class="flow">
+  <li>Make sure AI is configured (Local model loaded, or BYOK key saved).</li>
+  <li>Click any report row to open the dialog.</li>
+  <li>Switch to the <b>AI summary</b> tab.</li>
+  <li>Click <b>Generate</b>. The model streams a 4-section plain-English briefing (what it's about, key findings, recommendations, why it matters).</li>
+  <li>The summary is cached in your browser — opening that report again later shows it instantly. Click <b>Regenerate</b> for a fresh attempt.</li>
+</ol>
+<div class="callout tip">Switching tabs while a summary is streaming — say to peek at the Full text — won't lose progress. Switch back and the latest token count is what you'll see.</div>
+
+<h2 id="ask">7. Asking questions about a report</h2>
+<ol class="flow">
+  <li>From the dialog, switch to the <b>Ask</b> tab.</li>
+  <li>Type a question. Press <span class="kbd">Enter</span> or click <b>Send</b>.</li>
+  <li>The model gets the report's full text (truncated to fit the context window) plus your cached summary if one exists. It answers from the report only.</li>
+  <li>Each new question + answer is appended to the thread for the duration of the dialog. Closing the dialog resets the thread.</li>
+</ol>
+<div class="callout">Ask uses any cached AI summary as additional context, so generating a summary first sometimes produces sharper answers — especially for "what does this report recommend?" style questions.</div>
+
+<h2 id="search-enrich">8. Web-search enrichment for Ask</h2>
+<p>Optional. When configured, you get a <span class="kbd">🌐</span> button next to <b>Send</b> in the Ask tab. Clicking it does a web search first and feeds the top results into the prompt alongside the report text. Useful for "is there recent news on this?" or "has the government acted on this since the report?" style follow-ups.</p>
+<table>
+  <thead><tr><th>Provider</th><th>Free tier</th><th>Where to get a key</th></tr></thead>
+  <tbody>
+    <tr><td>Tavily</td><td>1,000 queries/month</td><td><a href="https://app.tavily.com" target="_blank">app.tavily.com</a></td></tr>
+    <tr><td>Brave Search</td><td>2,000 queries/month</td><td><a href="https://api.search.brave.com" target="_blank">api.search.brave.com</a></td></tr>
+    <tr><td>SearXNG (self-hosted)</td><td>Unlimited (you run it)</td><td>Use any public instance with JSON output enabled, or self-host from <a href="https://github.com/searxng/searxng" target="_blank">github.com/searxng/searxng</a></td></tr>
+  </tbody>
+</table>
+<ol class="flow">
+  <li>Settings → <b>Web search</b> section.</li>
+  <li>Pick a provider. For Tavily / Brave, paste your API key. For SearXNG, paste the instance URL (e.g. <code>https://searx.example.org</code>).</li>
+  <li>Save. The 🌐 button appears in the Ask tab.</li>
+</ol>
+
+<h2 id="export">9. Exporting metadata and summaries</h2>
+<p>Two buttons live in the toolbar above the report list:</p>
+<ul>
+  <li><b>⬇ Metadata (CSV)</b> — exports the <em>currently filtered</em> reports as CSV. 13 columns including <code>has_text</code> and <code>has_summary</code>. Useful for dropping into Excel / a notebook for analysis.</li>
+  <li><b>⬇ Summaries (MD)</b> — exports every AI summary you've generated as a single Markdown file, with each report headed by title + committee + LS + report number.</li>
+</ul>
+<p>Both downloads happen client-side — nothing leaves your machine.</p>
+
+<h2 id="batch">10. Batch-summarising a committee</h2>
+<p>The <b>✨ Summarise filtered</b> button runs every report in the current filter that has extracted text but no cached summary. Useful for "summarise everything Defence committee published in LS18".</p>
+<ol class="flow">
+  <li>Filter the list (e.g. Committee = Defence).</li>
+  <li>Click <b>✨ Summarise filtered</b>. The button shows the count of eligible reports and an ETA.</li>
+  <li>Confirm. The dialog closes and the loop runs sequentially. The button updates to <em>"Summarising N/M…"</em>.</li>
+  <li>Click again to stop after the current report. Anything generated so far is saved.</li>
+</ol>
+<div class="callout warn">With local AI, each summary takes 30–90 seconds depending on report length and your GPU. Plan accordingly. With a paid BYOK provider, the cost adds up — see §12.</div>
+
+<h2 id="privacy">11. Privacy &amp; what's cached locally</h2>
+<p>SansadLocal has no server. Everything you generate stays in your browser:</p>
+<ul>
+  <li><b>API keys</b> — <code>localStorage</code>, never sent except to the provider you chose.</li>
+  <li><b>Generated summaries</b> — IndexedDB store <code>summaries</code>. Persistent across sessions. Visible in DevTools → Application → IndexedDB → <code>sansadlocal</code>.</li>
+  <li><b>Extracted PDF text</b> — IndexedDB store <code>texts</code>. Once fetched, it's there for life. On return visits, only newly-published reports get pulled from the mirror.</li>
+  <li><b>Model weights</b> — browser Cache Storage. ~1.5–4.9 GB depending on the model.</li>
+  <li><b>Settings</b> — <code>localStorage</code> key <code>sansadlocal.settings.v1</code>.</li>
+</ul>
+<p>What leaves your browser:</p>
+<ul>
+  <li>Fetches to <code>naklitechie.github.io/parliamentwatch-data/</code> — the static data mirror. No tracking, no analytics.</li>
+  <li>Fetches to <code>huggingface.co</code> — model weights, only on first load of a given model.</li>
+  <li>BYOK requests go directly to your chosen provider. Your key isn't proxied anywhere.</li>
+  <li>Search-enrichment requests go directly to your chosen search provider.</li>
+</ul>
+<p>What never happens: no analytics, no accounts, no telemetry, no server logs (no server). The page is a static <code>index.html</code> served from GitHub Pages, fronted by Cloudflare for the custom domain.</p>
+
+<h2 id="costs">12. Costs &amp; limits — what's free, what isn't</h2>
+<p>Three layers of cost. The first is always free; the other two depend on your choice.</p>
+
+<h3>Layer 1 — SansadLocal infrastructure</h3>
+<table>
+  <thead><tr><th>Component</th><th>Cost</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>The app itself</td><td>Free</td><td>Static HTML on GitHub Pages.</td></tr>
+    <tr><td>Daily data scrape</td><td>Free</td><td>GitHub Actions free tier (public repos = unlimited minutes).</td></tr>
+    <tr><td>Data hosting</td><td>Free</td><td>GitHub Pages, 100 GB/month soft limit. Current data &lt;500 MB.</td></tr>
+    <tr><td>Custom domain (Cloudflare)</td><td>Free</td><td>Cloudflare DNS + Pages, free tier.</td></tr>
+  </tbody>
+</table>
+
+<h3>Layer 2 — Local AI inference</h3>
+<table>
+  <thead><tr><th>Model</th><th>Cost</th><th>Limits</th></tr></thead>
+  <tbody>
+    <tr><td>Gemma 4 / Ternary Bonsai (any size)</td><td>Free</td><td>Runs on your GPU. Bandwidth: one-time download, then nothing. CPU/GPU time is yours.</td></tr>
+  </tbody>
+</table>
+
+<h3>Layer 3 — BYOK API providers (optional)</h3>
+<table>
+  <thead><tr><th>Provider</th><th>Free tier</th><th>Pay-as-you-go</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Anthropic</b> (Claude)</td>
+      <td>None — paid only.</td>
+      <td>~$3/M input · $15/M output (Sonnet 4.5). A 50-page summary ≈ $0.05–$0.10.</td>
+    </tr>
+    <tr>
+      <td><b>OpenAI</b> (GPT)</td>
+      <td>None on most models. Some accounts get $5 trial credit.</td>
+      <td>~$0.15/M input · $0.60/M output (GPT-4o-mini). A summary ≈ $0.005.</td>
+    </tr>
+    <tr>
+      <td><b>Google Gemini</b></td>
+      <td><b>Yes.</b> 15 req/min, 1M tokens/day free. Get a key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com</a>.</td>
+      <td>Above the free tier, ~$0.075/M input · $0.30/M output (Gemini 2.5 Flash).</td>
+    </tr>
+    <tr>
+      <td><b>Groq</b></td>
+      <td><b>Yes.</b> Free tier with rate limits (~30 req/min). Inference is very fast (Llama 3.3 70B in seconds). Get a key at <a href="https://console.groq.com/keys" target="_blank">console.groq.com</a>.</td>
+      <td>Pay tier available for higher rate limits.</td>
+    </tr>
+    <tr>
+      <td><b>OpenRouter</b></td>
+      <td><b>Yes.</b> Free models (look for <code>:free</code> suffix in the model name). Get a key at <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai</a>.</td>
+      <td>Pay-as-you-go for premium models from many providers.</td>
+    </tr>
+    <tr>
+      <td><b>Ollama</b></td>
+      <td><b>Yes — fully free.</b> Runs on your computer. Install from <a href="https://ollama.com" target="_blank">ollama.com</a>, then <code>ollama pull llama3.2</code>. Set <code>OLLAMA_ORIGINS=https://sansadlocal.naklitechie.com</code> when starting Ollama so the browser can reach it.</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td><b>Custom OpenAI-compatible</b></td>
+      <td>Whatever your endpoint charges (or doesn't).</td>
+      <td>For self-hosted vLLM / LM Studio / Together.ai etc.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Layer 3b — Web-search enrichment (optional)</h3>
+<table>
+  <thead><tr><th>Provider</th><th>Free tier</th><th>Pay-as-you-go</th></tr></thead>
+  <tbody>
+    <tr><td>Tavily</td><td>1,000 queries/month</td><td>$10–$80/month for higher tiers.</td></tr>
+    <tr><td>Brave Search</td><td>2,000 queries/month</td><td>From $3/CPM (1,000 queries).</td></tr>
+    <tr><td>SearXNG</td><td>Free, self-hosted</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<div class="callout tip"><b>Recommended free path for most people.</b> Local AI = Gemma 4 E2B (or Ternary Bonsai 1.7B if low on bandwidth) + Tavily for search enrichment. You'll never see a bill.</div>
+
+<h2 id="troubleshooting">13. Troubleshooting</h2>
+<h3>The local model won't load</h3>
+<ul>
+  <li>Check the AI status pill — if it says <em>"No WebGPU"</em>, the browser doesn't support WebGPU. Use Chrome 113+, Edge 113+, Brave, or Firefox 130+.</li>
+  <li>If it shows <em>"Worker error"</em>, open DevTools console for the underlying message (network failure, OOM, model file corruption). The "Clear cache" button in Settings forces a re-download.</li>
+</ul>
+
+<h3>Generation is slow</h3>
+<ul>
+  <li>Local AI on a CPU-only machine is slow — WebGPU on a recent GPU is needed for usable speed. Check <code>chrome://gpu</code> in Chrome.</li>
+  <li>Long reports get truncated to fit the model's context window (8K for Gemma 4 E2B, 32K for Bonsai 1.7B/4B, 64K for Bonsai 8B). For very long reports, the larger Bonsai models or a BYOK provider produce better summaries.</li>
+</ul>
+
+<h3>Ollama returns CORS errors</h3>
+<p>Ollama's HTTP API doesn't allow cross-origin requests by default. Set <code>OLLAMA_ORIGINS</code> when starting Ollama:</p>
+<pre style="background:var(--surface2); border:1px solid var(--border); padding:10px; border-radius:4px; font-family:ui-monospace,Menlo,monospace; font-size:0.85rem; overflow-x:auto">OLLAMA_ORIGINS="https://sansadlocal.naklitechie.com" ollama serve</pre>
+<p>If you opened the app via <code>http://localhost:8000</code> for local dev, set <code>OLLAMA_ORIGINS=http://localhost:8000</code> instead.</p>
+
+<h3>The mirror is missing data</h3>
+<p>The daily action runs at 04:30 UTC (10:00 IST). If a new report shows up on sansad.in mid-day, it'll appear in SansadLocal the next morning. Settings → <b>Refresh from mirror</b> force-fetches; on a fresh visit the latest data loads automatically.</p>
+
+<h3>How do I add my own screenshots to this guide?</h3>
+<p>Drop PNG files into <code>/guide/img/</code> in the SansadLocal repo. Reference them as <code>&lt;img src="img/your-file.png"&gt;</code> from this page.</p>
+
+<div class="footer-back">
+  <a href="../">← Back to SansadLocal</a> ·
+  <a href="https://github.com/NakliTechie/SansadLocal" target="_blank">Source on GitHub</a>
+</div>
+
+</div>
+</body>
+</html>

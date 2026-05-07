@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Chirag Patnaik">
-<meta name="version" content="0.2.0">
+<meta name="version" content="0.3.0">
 <meta name="description" content="Browse Indian Parliamentary Committee reports with private, on-device AI. No server, no API key required, no data leaving your device.">
 <title>SansadLocal — Parliamentary Committee Reports</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f5efe2'/%3E%3Cpath d='M6 24h20M8 24V14M12 24V14M16 24V14M20 24V14M24 24V14M5 14h22L16 6z' stroke='%23cc5500' stroke-width='1.6' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -774,8 +774,15 @@ main {
         <div class="settings-row">
           <label>Model</label>
           <select id="localModel">
-            <option value="gemma4-e2b">Gemma 4 E2B (~1.5 GB)</option>
-            <option value="gemma4-e4b">Gemma 4 E4B (~4.9 GB)</option>
+            <optgroup label="Gemma 4 (multimodal, recommended)">
+              <option value="gemma4-e2b">Gemma 4 E2B (~1.5 GB)</option>
+              <option value="gemma4-e4b">Gemma 4 E4B (~4.9 GB)</option>
+            </optgroup>
+            <optgroup label="Ternary Bonsai (Qwen3-derived, q2f16)">
+              <option value="bonsai-1.7b">Ternary Bonsai 1.7B (~470 MB)</option>
+              <option value="bonsai-4b">Ternary Bonsai 4B (~1.1 GB)</option>
+              <option value="bonsai-8b">Ternary Bonsai 8B (~2.2 GB)</option>
+            </optgroup>
           </select>
         </div>
         <div class="settings-row">
@@ -820,6 +827,28 @@ main {
       </div>
 
       <div class="settings-section">
+        <h3>Web search (optional, for Ask)</h3>
+        <p>Adds the option to enrich Ask answers with recent web results. Without this, Ask uses only the report itself. All providers support free tiers; key stays in this browser.</p>
+        <div class="settings-row">
+          <label>Provider</label>
+          <select id="searchProvider">
+            <option value="none">None (off)</option>
+            <option value="tavily">Tavily — 1,000 queries/mo free</option>
+            <option value="brave">Brave Search — 2,000 queries/mo free</option>
+            <option value="searxng">SearXNG (self-hosted, free)</option>
+          </select>
+        </div>
+        <div class="settings-row" id="searchKeyRow">
+          <label>API key</label>
+          <input type="password" id="searchApiKey" placeholder="API key">
+        </div>
+        <div class="settings-row" id="searchUrlRow" style="display:none">
+          <label>Instance URL</label>
+          <input type="text" id="searchBaseUrl" placeholder="https://searx.example.org">
+        </div>
+      </div>
+
+      <div class="settings-section">
         <h3>Data</h3>
         <p id="dataInfo">—</p>
         <button class="sm" id="refreshDataBtn">Refresh from mirror</button>
@@ -848,12 +877,13 @@ main {
     </div>
     <div class="modal-body">
       <div class="tab-pane active" id="hAbout">
+        <p style="background:var(--accent-bg); border:1px solid var(--accent); border-radius:6px; padding:10px 14px; margin-bottom:14px; font-weight:500;">📘 New here? <a href="guide/" target="_blank" rel="noopener" style="font-weight:700;">Open the full user guide →</a> — covers AI setup, BYOK costs/limits, web search enrichment, privacy details.</p>
         <h3>What is SansadLocal?</h3>
         <p>A single-file browser app to browse, search, and summarise reports from India's 24 Departmentally Related Standing Committees (DRSCs) — 16 chaired by Lok Sabha, 8 by Rajya Sabha. The reports are scraped daily from <a href="https://sansad.in" target="_blank" rel="noopener">sansad.in</a> and mirrored as static JSON/text on GitHub Pages so this page can read them with no server, no auth, no API key.</p>
         <h3>Why committee reports matter</h3>
         <p>DRSCs are the most robust institutional mechanism through which Indian Parliament scrutinises the executive. Their reports — on demands for grants, bills, and policy subjects — are evidence-based and non-partisan. They're also poorly indexed and rarely read.</p>
         <h3>Where AI fits</h3>
-        <p>Open any report and you get four tabs: <b>Details</b> (metadata + PDF links), <b>Full text</b> (when extracted), <b>AI summary</b> (one click → plain-English briefing), and <b>Ask</b> (chat with the report). AI runs on your device by default — open <b>Settings</b> (the gear icon, top right) to load a model or set a BYOK key.</p>
+        <p>Open any report and you get four tabs: <b>Details</b> (metadata + PDF links), <b>Full text</b> (when extracted), <b>AI summary</b> (one click → plain-English briefing), and <b>Ask</b> (chat with the report). AI runs on your device by default — open <b>Settings</b> (the gear icon, top right) to load a model or set a BYOK key. Full walkthrough in the <a href="guide/" target="_blank" rel="noopener"><b>user guide</b></a>.</p>
       </div>
       <div class="tab-pane" id="hBrowse">
         <h3>Filtering</h3>
@@ -984,6 +1014,7 @@ const MODELS = {
   'gemma4-e2b': {
     id: 'onnx-community/gemma-4-E2B-it-ONNX',
     label: 'Gemma 4 E2B',
+    size: '~1.5 GB',
     dtype: 'q4f16',
     type: 'multimodal',
     contextSize: 8192,
@@ -992,10 +1023,40 @@ const MODELS = {
   'gemma4-e4b': {
     id: 'onnx-community/gemma-4-E4B-it-ONNX',
     label: 'Gemma 4 E4B',
+    size: '~4.9 GB',
     dtype: 'q4f16',
     type: 'multimodal',
     contextSize: 12288,
     genConfig: { temperature: 0.5, top_k: 40, top_p: 0.95, max_new_tokens: 1024, repetition_penalty: 1.1 },
+  },
+  // Ternary Bonsai — Qwen3-derived ternary-quantized models. Smaller download
+  // than Gemma for similar quality; q2f16 is the recommended weight format.
+  'bonsai-1.7b': {
+    id: 'onnx-community/Ternary-Bonsai-1.7B-ONNX',
+    label: 'Ternary Bonsai 1.7B',
+    size: '~470 MB',
+    dtype: 'q2f16',
+    type: 'causal',
+    contextSize: 32768,
+    genConfig: { temperature: 0.7, top_k: 20, top_p: 0.8, max_new_tokens: 1024, repetition_penalty: 1.05 },
+  },
+  'bonsai-4b': {
+    id: 'onnx-community/Ternary-Bonsai-4B-ONNX',
+    label: 'Ternary Bonsai 4B',
+    size: '~1.1 GB',
+    dtype: 'q2f16',
+    type: 'causal',
+    contextSize: 32768,
+    genConfig: { temperature: 0.7, top_k: 20, top_p: 0.8, max_new_tokens: 1024, repetition_penalty: 1.05 },
+  },
+  'bonsai-8b': {
+    id: 'onnx-community/Ternary-Bonsai-8B-ONNX',
+    label: 'Ternary Bonsai 8B',
+    size: '~2.2 GB',
+    dtype: 'q2f16',
+    type: 'causal',
+    contextSize: 65536,
+    genConfig: { temperature: 0.7, top_k: 20, top_p: 0.8, max_new_tokens: 1024, repetition_penalty: 1.05 },
   },
 };
 
@@ -1022,14 +1083,27 @@ Keep it neutral, factual, and accessible to a non-specialist. Do not invent deta
 REPORT:
 {TEXT}`;
 
-const QA_PROMPT_PREFIX = `You are answering questions about a specific report from an Indian Parliamentary Standing Committee. Use only the report content below to answer. If the answer isn't in the report, say so clearly.
-
-REPORT:
-{TEXT}
-
----
-
-QUESTION: `;
+// Builds the per-question prompt for the Ask tab. Pulls in:
+//   - the cached AI summary if one exists (gives the model a TOC-like overview)
+//   - the (truncated) full report text
+//   - optional web-search results when the user enables search-and-ask
+function buildAskPrompt({ summary, text, searchResults, question }) {
+  const parts = [
+    'You are answering questions about a specific report from an Indian Parliamentary Standing Committee. Use only the supplied material below to answer. If the answer isn\'t in the supplied material, say so clearly.',
+  ];
+  if (summary) {
+    parts.push('', 'SUMMARY (previously generated by AI):', summary);
+  }
+  parts.push('', 'REPORT:', text);
+  if (searchResults && searchResults.length) {
+    parts.push('', 'RECENT WEB CONTEXT (use cautiously, prefer the report itself when they conflict):');
+    for (const r of searchResults) {
+      parts.push(`- ${r.title}\n  ${r.url}\n  ${r.snippet}`);
+    }
+  }
+  parts.push('', '---', '', 'QUESTION: ' + question);
+  return parts.join('\n');
+}
 
 // ── State ─────────────────────────────────────────
 const state = {
@@ -1073,6 +1147,10 @@ const state = {
 
   // Batch summary state — set while a "Summarise filtered" run is in progress.
   batch: { running: false, total: 0, done: 0, cancel: false },
+
+  // Web search enrichment for Ask. Provider settings are persisted in
+  // localStorage alongside the AI settings.
+  search: { provider: 'none', apiKey: '', baseUrl: '' },
 };
 
 // ── Storage (localStorage for settings, IDB for cache) ─
@@ -1088,16 +1166,22 @@ function loadSettings() {
     if (s.apiKey) state.ai.apiKey = s.apiKey;
     if (s.apiModel) state.ai.apiModel = s.apiModel;
     if (s.apiBaseUrl) state.ai.apiBaseUrl = s.apiBaseUrl;
+    if (s.searchProvider) state.search.provider = s.searchProvider;
+    if (s.searchApiKey) state.search.apiKey = s.searchApiKey;
+    if (s.searchBaseUrl) state.search.baseUrl = s.searchBaseUrl;
   } catch (e) { console.warn('Bad settings', e); }
 }
 function saveSettings() {
   const s = {
-    aiMode:      state.ai.mode,
-    localModel:  state.ai.localModel,
-    apiProvider: state.ai.apiProvider,
-    apiKey:      state.ai.apiKey,
-    apiModel:    state.ai.apiModel,
-    apiBaseUrl:  state.ai.apiBaseUrl,
+    aiMode:         state.ai.mode,
+    localModel:     state.ai.localModel,
+    apiProvider:    state.ai.apiProvider,
+    apiKey:         state.ai.apiKey,
+    apiModel:       state.ai.apiModel,
+    apiBaseUrl:     state.ai.apiBaseUrl,
+    searchProvider: state.search.provider,
+    searchApiKey:   state.search.apiKey,
+    searchBaseUrl:  state.search.baseUrl,
   };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 }
@@ -1552,18 +1636,21 @@ function renderChatTab() {
     return `<div class="${cls}">${escapeHtml(m.content)}</div>`;
   }).join('');
 
+  const searchOn = isSearchConfigured();
   tab.innerHTML = `
     <div class="chat-thread" id="chatThread">${threadHTML}</div>
     <div class="chat-input-row">
       <textarea id="chatInput" rows="2" placeholder="Ask a question about this report..." ${isStreaming ? 'disabled' : ''}></textarea>
+      ${searchOn ? `<button class="ghost sm" id="chatSearchSendBtn" title="Search the web AND Send (uses your configured search provider)" ${isStreaming ? 'disabled' : ''}>&#127760;</button>` : ''}
       <button class="primary" id="chatSendBtn" ${isStreaming ? 'disabled' : ''}>Send</button>
       <button class="ghost sm" id="chatStopBtn" ${isStreaming ? '' : 'style="display:none"'}>Stop</button>
     </div>
   `;
-  document.getElementById('chatSendBtn').addEventListener('click', chatSend);
+  document.getElementById('chatSendBtn').addEventListener('click', () => chatSend({}));
+  if (searchOn) document.getElementById('chatSearchSendBtn').addEventListener('click', () => chatSend({ withSearch: true }));
   document.getElementById('chatStopBtn').addEventListener('click', aiStop);
   document.getElementById('chatInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend({}); }
   });
   const t = document.getElementById('chatThread');
   if (t) t.scrollTop = t.scrollHeight;
@@ -1576,12 +1663,13 @@ function createLocalWorker() {
   // initial release). If it becomes useful, copy the LocalMind version
   // verbatim — the rest of this worker is its proper subset.
   const code = `
-let env, AutoTokenizer, AutoProcessor, Gemma4ForConditionalGeneration, TextStreamer, InterruptableStoppingCriteria;
+let env, AutoTokenizer, AutoModelForCausalLM, AutoProcessor, Gemma4ForConditionalGeneration, TextStreamer, InterruptableStoppingCriteria;
 let stopping_criteria;
 
 const __modReady = import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4/+esm').then(m => {
   env = m.env;
   AutoTokenizer = m.AutoTokenizer;
+  AutoModelForCausalLM = m.AutoModelForCausalLM;
   AutoProcessor = m.AutoProcessor;
   Gemma4ForConditionalGeneration = m.Gemma4ForConditionalGeneration;
   TextStreamer = m.TextStreamer;
@@ -1592,19 +1680,33 @@ const __modReady = import('https://cdn.jsdelivr.net/npm/@huggingface/transformer
   stopping_criteria = new InterruptableStoppingCriteria();
 });
 
+// Two load paths — multimodal uses AutoProcessor + Gemma4ForConditionalGeneration,
+// causal uses AutoTokenizer + AutoModelForCausalLM. The 'processor' variable
+// is non-null iff the loaded model is multimodal; generate() branches on it.
 let processor = null;
 let tokenizer = null;
 let model = null;
 
 const progressCallback = (p) => self.postMessage({ type: 'progress', data: p });
 
-async function loadModel(modelId, dtype) {
+async function loadMultimodal(modelId, dtype) {
   processor = await AutoProcessor.from_pretrained(modelId, { progress_callback: progressCallback });
   tokenizer = processor.tokenizer;
   model = await Gemma4ForConditionalGeneration.from_pretrained(modelId, {
     dtype, device: 'webgpu', progress_callback: progressCallback,
   });
-  // Warmup: compile WebGPU shaders
+  self.postMessage({ type: 'warmup' });
+  const warmupInputs = tokenizer('a');
+  await model.generate({ ...warmupInputs, max_new_tokens: 1 });
+  self.postMessage({ type: 'ready' });
+}
+
+async function loadCausal(modelId, dtype) {
+  processor = null;
+  tokenizer = await AutoTokenizer.from_pretrained(modelId, { progress_callback: progressCallback });
+  model = await AutoModelForCausalLM.from_pretrained(modelId, {
+    dtype, device: 'webgpu', progress_callback: progressCallback,
+  });
   self.postMessage({ type: 'warmup' });
   const warmupInputs = tokenizer('a');
   await model.generate({ ...warmupInputs, max_new_tokens: 1 });
@@ -1614,9 +1716,18 @@ async function loadModel(modelId, dtype) {
 async function generate(messages, id, gc) {
   stopping_criteria.reset();
   try {
-    const prompt = processor.apply_chat_template(messages, { add_generation_prompt: true });
-    const inputs = await processor(prompt, null, null, { add_special_tokens: false });
-    const streamer = new TextStreamer(processor.tokenizer, {
+    let inputs, streamerTok;
+    if (processor) {
+      // Multimodal path
+      const prompt = processor.apply_chat_template(messages, { add_generation_prompt: true });
+      inputs = await processor(prompt, null, null, { add_special_tokens: false });
+      streamerTok = processor.tokenizer;
+    } else {
+      // Causal path
+      inputs = tokenizer.apply_chat_template(messages, { add_generation_prompt: true, return_dict: true });
+      streamerTok = tokenizer;
+    }
+    const streamer = new TextStreamer(streamerTok, {
       skip_prompt: true,
       skip_special_tokens: true,
       callback_function: (text) => self.postMessage({ type: 'token', token: text, id }),
@@ -1641,10 +1752,14 @@ async function generate(messages, id, gc) {
 
 self.addEventListener('message', async (e) => {
   await __modReady;
-  const { type, modelId, dtype, messages, id, generationConfig } = e.data;
+  const { type, modelId, modelType, dtype, messages, id, generationConfig } = e.data;
   if (type === 'load') {
-    try { await loadModel(modelId, dtype); }
-    catch (err) { self.postMessage({ type: 'error', message: 'Failed to load model: ' + (err.message || String(err)) }); }
+    try {
+      if (modelType === 'causal') await loadCausal(modelId, dtype);
+      else await loadMultimodal(modelId, dtype);
+    } catch (err) {
+      self.postMessage({ type: 'error', message: 'Failed to load model: ' + (err.message || String(err)) });
+    }
   } else if (type === 'generate') {
     await generate(messages, id, generationConfig);
   } else if (type === 'stop') {
@@ -1826,7 +1941,7 @@ async function loadLocalModel() {
   if (state.ai.worker) { try { state.ai.worker.terminate(); } catch {} }
   state.ai.worker = createLocalWorker();
   const m = MODELS[state.ai.localModel];
-  state.ai.worker.postMessage({ type: 'load', modelId: m.id, dtype: m.dtype });
+  state.ai.worker.postMessage({ type: 'load', modelId: m.id, modelType: m.type, dtype: m.dtype });
 }
 
 async function isModelCached(modelId) {
@@ -2063,7 +2178,8 @@ async function generateSummary() {
   }
 }
 
-async function chatSend() {
+async function chatSend(opts) {
+  opts = opts || {};
   const r = state.selectedReport;
   if (!r) return;
   const input = document.getElementById('chatInput');
@@ -2078,14 +2194,49 @@ async function chatSend() {
   // renderer reads from this array, so any tab-switch round trip rebuilds
   // the thread including the in-progress assistant content.
   state.dialogChat.push({ role: 'user', content: q });
+
+  // Optional: web-search enrichment. Adds a transient system row so the
+  // user sees what was fetched and trusts the loop.
+  let searchResults = null;
+  if (opts.withSearch) {
+    if (!isSearchConfigured()) {
+      state.dialogChat.push({ role: 'system', content: 'Web search not configured. Open Settings → Web search to add a provider.' });
+      input.value = '';
+      renderChatTab();
+      return;
+    }
+    state.dialogChat.push({ role: 'system', content: `Searching the web for "${q}"…` });
+    renderChatTab();
+    try {
+      searchResults = await runSearch(q);
+      const resultLine = searchResults.length
+        ? `Found ${searchResults.length} result${searchResults.length === 1 ? '' : 's'}: ${searchResults.map(x => x.title).slice(0, 3).join(' · ')}${searchResults.length > 3 ? '…' : ''}`
+        : 'No web results.';
+      // Replace the "Searching…" line with the result summary
+      state.dialogChat[state.dialogChat.length - 1] = { role: 'system', content: resultLine };
+    } catch (e) {
+      state.dialogChat[state.dialogChat.length - 1] = { role: 'system', content: 'Search failed: ' + e.message };
+      searchResults = null;
+    }
+  }
+
   state.dialogChat.push({ role: 'assistant', content: '' });
   state.ai.streamingContext = { reportKey: reportKey(r), tab: 'chat' };
   input.value = '';
   renderChatTab();
 
+  // Use the cached summary as additional context if one exists.
+  const summary = state.cache.summaries[reportKey(r)];
+
+  const userPrompt = buildAskPrompt({
+    summary: summary || null,
+    text: _truncateForContext(text),
+    searchResults,
+    question: q,
+  });
   const messages = [
-    { role: 'system', content: 'You answer questions about Indian Parliamentary Standing Committee reports. Use only the supplied report text. If the answer is not present, say so.' },
-    { role: 'user', content: QA_PROMPT_PREFIX.replace('{TEXT}', _truncateForContext(text)) + q },
+    { role: 'system', content: 'You answer questions about Indian Parliamentary Standing Committee reports. Use only the supplied material. If the answer is not present, say so.' },
+    { role: 'user', content: userPrompt },
   ];
 
   try {
@@ -2108,6 +2259,54 @@ async function chatSend() {
     state.ai.streamingContext = null;
     renderChatTab();
   }
+}
+
+// ── Web search providers (BYOK enrichment for Ask) ─
+// Three options:
+//   - tavily   (free 1K queries/mo; key from app.tavily.com)
+//   - brave    (free 2K queries/mo; key from api.search.brave.com)
+//   - searxng  (self-hosted; user supplies their instance URL)
+// Costs/limits noted in the user guide and Settings copy. Returns a
+// uniform [{title, url, snippet}] shape regardless of provider.
+function isSearchConfigured() {
+  const p = state.search.provider;
+  if (!p || p === 'none') return false;
+  if (p === 'searxng') return !!state.search.baseUrl;
+  return !!state.search.apiKey;
+}
+const SearchProviders = {
+  async tavily(query, apiKey) {
+    const res = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: apiKey, query, max_results: 5, search_depth: 'basic' }),
+    });
+    if (!res.ok) throw new Error('Tavily ' + res.status + ': ' + (await res.text()).slice(0, 200));
+    const j = await res.json();
+    return (j.results || []).map(r => ({ title: r.title, url: r.url, snippet: (r.content || '').slice(0, 600) }));
+  },
+  async brave(query, apiKey) {
+    const res = await fetch('https://api.search.brave.com/res/v1/web/search?q=' + encodeURIComponent(query), {
+      headers: { 'X-Subscription-Token': apiKey, 'Accept': 'application/json' },
+    });
+    if (!res.ok) throw new Error('Brave ' + res.status + ': ' + (await res.text()).slice(0, 200));
+    const j = await res.json();
+    return (j.web?.results || []).slice(0, 5).map(r => ({ title: r.title, url: r.url, snippet: (r.description || '').slice(0, 600) }));
+  },
+  async searxng(query, baseUrl) {
+    const url = baseUrl.replace(/\/$/, '') + '/search?q=' + encodeURIComponent(query) + '&format=json';
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('SearXNG ' + res.status + ': ' + (await res.text()).slice(0, 200));
+    const j = await res.json();
+    return (j.results || []).slice(0, 5).map(r => ({ title: r.title, url: r.url, snippet: (r.content || '').slice(0, 600) }));
+  },
+};
+async function runSearch(query) {
+  const c = state.search;
+  if (c.provider === 'tavily') return SearchProviders.tavily(query, c.apiKey);
+  if (c.provider === 'brave') return SearchProviders.brave(query, c.apiKey);
+  if (c.provider === 'searxng') return SearchProviders.searxng(query, c.baseUrl);
+  throw new Error('No web search provider configured');
 }
 
 // ── Full-text indexing (background) ──────────────
@@ -2288,8 +2487,12 @@ function renderSettings() {
   document.getElementById('apiKey').value = state.ai.apiKey || '';
   document.getElementById('apiModel').value = state.ai.apiModel || '';
   document.getElementById('apiBaseUrl').value = state.ai.apiBaseUrl || '';
+  document.getElementById('searchProvider').value = state.search.provider || 'none';
+  document.getElementById('searchApiKey').value = state.search.apiKey || '';
+  document.getElementById('searchBaseUrl').value = state.search.baseUrl || '';
   toggleAISections();
   toggleProviderRows();
+  toggleSearchRows();
   // Data section
   const meta = state.data.meta;
   document.getElementById('dataInfo').textContent = meta
@@ -2322,6 +2525,11 @@ function toggleProviderRows() {
   document.getElementById('apiModel').placeholder = def.model;
   document.getElementById('apiBaseUrl').placeholder = def.url;
 }
+function toggleSearchRows() {
+  const p = document.getElementById('searchProvider').value;
+  document.getElementById('searchKeyRow').style.display = (p === 'tavily' || p === 'brave') ? '' : 'none';
+  document.getElementById('searchUrlRow').style.display = (p === 'searxng') ? '' : 'none';
+}
 
 function applySettingsFromUI() {
   state.ai.mode        = document.getElementById('aiMode').value;
@@ -2330,6 +2538,9 @@ function applySettingsFromUI() {
   state.ai.apiKey      = document.getElementById('apiKey').value.trim();
   state.ai.apiModel    = document.getElementById('apiModel').value.trim();
   state.ai.apiBaseUrl  = document.getElementById('apiBaseUrl').value.trim();
+  state.search.provider = document.getElementById('searchProvider').value;
+  state.search.apiKey   = document.getElementById('searchApiKey').value.trim();
+  state.search.baseUrl  = document.getElementById('searchBaseUrl').value.trim();
   saveSettings();
 }
 
@@ -2371,6 +2582,7 @@ function attachHandlers() {
   document.getElementById('settingsCloseBtn').addEventListener('click', () => closeModal('settingsModal'));
   document.getElementById('aiMode').addEventListener('change', toggleAISections);
   document.getElementById('apiProvider').addEventListener('change', toggleProviderRows);
+  document.getElementById('searchProvider').addEventListener('change', toggleSearchRows);
   document.getElementById('loadModelBtn').addEventListener('click', () => { applySettingsFromUI(); loadLocalModel(); });
   document.getElementById('clearCacheBtn').addEventListener('click', clearModelCache);
   document.getElementById('refreshDataBtn').addEventListener('click', async () => {
@@ -2451,6 +2663,33 @@ async function loadCachedSummaries() {
   } catch {}
 }
 
+async function loadCachedTexts() {
+  // Bulk-hydrate every cached extracted-text into state.cache.text in one
+  // IDB transaction. This makes preloadFullTextIndex idempotent across
+  // sessions — on reload, every text is already in memory and we only
+  // need to network-fetch reports the mirror has newly extracted.
+  try {
+    const db = await openIDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction('texts', 'readonly');
+      const store = tx.objectStore('texts');
+      const req = store.openCursor();
+      let count = 0;
+      req.onsuccess = (e) => {
+        const c = e.target.result;
+        if (c) {
+          state.cache.text[c.key] = c.value;
+          count++;
+          c.continue();
+        } else {
+          resolve(count);
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch { return 0; }
+}
+
 (async function init() {
   loadSettings();
   attachHandlers();
@@ -2461,11 +2700,13 @@ async function loadCachedSummaries() {
   renderHeaderStats();
   applyFilters();
   loadCachedSummaries();
-  // Kick off the background full-text index so search can match against
-  // extracted PDF content. Idempotent — if no extracted texts exist this
-  // resolves immediately. On the current corpus (~70 texts) this finishes
-  // in seconds; with the full backfill (~2600) it takes a few minutes.
-  preloadFullTextIndex();
+  // Hydrate any previously-fetched texts from IDB before kicking off the
+  // background indexer — so on a return visit we only network-fetch reports
+  // the mirror has newly published since last time.
+  loadCachedTexts().then((n) => {
+    if (n) renderList();   // refresh badges; cached text counts toward "with text" implicitly
+    preloadFullTextIndex();
+  });
   // If local mode is selected and the model is already cached on this device,
   // auto-load it silently. The header pill tracks progress; no user action
   // needed. First-time users still see "AI off" and can click the pill to
