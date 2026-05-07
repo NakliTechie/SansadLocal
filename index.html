@@ -140,6 +140,60 @@ header {
   background: var(--surface);
 }
 
+.ai-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;   /* dot stays anchored left even as text grows/shrinks */
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+  min-width: 160px;              /* fixed footprint stops layout jitter as the text changes */
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ai-pill > span:last-child {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-pill:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface);
+}
+.ai-pill .ai-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: currentColor;
+}
+.ai-pill.ready { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+.ai-pill.loading { background: var(--amber-bg); color: var(--amber); border-color: var(--amber); }
+.ai-pill.api { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+.ai-pill.error { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+.ai-pill.pulse { animation: ai-pulse 1.4s ease-out 2; }
+@keyframes ai-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(19, 136, 56, 0.0); }
+  50%      { box-shadow: 0 0 0 6px rgba(19, 136, 56, 0.18); }
+}
+
+.ai-empty {
+  text-align: center;
+  padding: 24px 16px;
+  background: var(--surface2);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+.ai-empty p { margin-bottom: 10px; }
+.ai-empty .ai-empty-cta { margin-top: 6px; }
+
 /* ── Main layout ─────────────────────────────────── */
 main {
   flex: 1;
@@ -449,12 +503,22 @@ main {
 .status-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;  /* dot left-anchored; text fills the rest, no jitter */
   gap: 6px;
   padding: 3px 10px;
   font-size: 0.78rem;
   border-radius: 12px;
   background: var(--surface3);
   color: var(--muted);
+  min-width: 220px;
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.status-pill > span:last-child {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .status-pill.ready { background: var(--green-bg); color: var(--green); }
 .status-pill.loading { background: var(--amber-bg); color: var(--amber); }
@@ -462,6 +526,7 @@ main {
 .status-pill .dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: currentColor;
+  flex-shrink: 0;
 }
 
 .progress-bar {
@@ -483,7 +548,8 @@ main {
   font-size: 0.78rem;
   color: var(--muted);
   margin-top: 4px;
-  min-height: 1.2em;
+  min-height: 2.6em;             /* reserve 2 lines so long filenames don't push layout */
+  word-break: break-all;
 }
 
 /* ── Help modal ─────────────────────────────────── */
@@ -586,6 +652,7 @@ main {
   </div>
   <div class="spacer"></div>
   <div class="header-stats" id="headerStats"></div>
+  <button class="ai-pill" id="aiPill" title="AI status — click to configure"><span class="ai-dot"></span><span id="aiPillText">AI off</span></button>
   <button class="icon-btn" id="settingsBtn" title="Settings (AI model, BYOK)" aria-label="Settings">&#9881;</button>
   <button class="icon-btn" id="helpBtn" title="Help" aria-label="Help">?</button>
 </header>
@@ -749,15 +816,16 @@ main {
       <button class="tab-btn" data-htab="browse">Browse</button>
       <button class="tab-btn" data-htab="ai">AI</button>
       <button class="tab-btn" data-htab="privacy">Privacy</button>
+      <button class="tab-btn" data-htab="credits">Credits</button>
     </div>
     <div class="modal-body">
       <div class="tab-pane active" id="hAbout">
         <h3>What is SansadLocal?</h3>
         <p>A single-file browser app to browse, search, and summarise reports from India's 24 Departmentally Related Standing Committees (DRSCs) — 16 chaired by Lok Sabha, 8 by Rajya Sabha. The reports are scraped daily from <a href="https://sansad.in" target="_blank" rel="noopener">sansad.in</a> and mirrored as static JSON/text on GitHub Pages so this page can read them with no server, no auth, no API key.</p>
-        <h3>Credit</h3>
-        <p>Built on top of the brilliant <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank" rel="noopener">ParliamentWatch</a> by Pranay Kotasthane. SansadLocal repackages it as a single HTML file with on-device AI.</p>
         <h3>Why committee reports matter</h3>
         <p>DRSCs are the most robust institutional mechanism through which Indian Parliament scrutinises the executive. Their reports — on demands for grants, bills, and policy subjects — are evidence-based and non-partisan. They're also poorly indexed and rarely read.</p>
+        <h3>Where AI fits</h3>
+        <p>Open any report and you get four tabs: <b>Details</b> (metadata + PDF links), <b>Full text</b> (when extracted), <b>AI summary</b> (one click → plain-English briefing), and <b>Ask</b> (chat with the report). AI runs on your device by default — open <b>Settings</b> (the gear icon, top right) to load a model or set a BYOK key.</p>
       </div>
       <div class="tab-pane" id="hBrowse">
         <h3>Filtering</h3>
@@ -806,6 +874,25 @@ main {
           <li>The page is served as a static <code>index.html</code> from GitHub Pages.</li>
         </ul>
       </div>
+      <div class="tab-pane" id="hCredits">
+        <h3>Built on top of ParliamentWatch</h3>
+        <p>The scraping logic, committee config, API map, and the original idea are all from <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank" rel="noopener"><b>ParliamentWatch</b></a> by <a href="https://twitter.com/pranaykotas" target="_blank" rel="noopener">Pranay Kotasthane</a>. The <code>scraper.py</code>, <code>pdf_utils.py</code>, and <code>config.py</code> in the data-mirror repo are vendored from his project. SansadLocal repackages it as a single HTML file with on-device AI; the data engine underneath is his.</p>
+        <h3>Open-source pieces</h3>
+        <ul>
+          <li><a href="https://huggingface.co/docs/transformers.js" target="_blank">Transformers.js v4</a> — runs Gemma in the browser via WebGPU</li>
+          <li><a href="https://huggingface.co/onnx-community/gemma-4-E2B-it-ONNX" target="_blank">Gemma 4 (ONNX)</a> — by Google, ONNX conversion by the HF community</li>
+          <li><a href="https://github.com/py-pdf/pypdf" target="_blank">pypdf</a> — PDF text extraction in the daily mirror Action</li>
+          <li>Hosted free on <a href="https://pages.github.com/" target="_blank">GitHub Pages</a></li>
+        </ul>
+        <h3>Built by</h3>
+        <p><a href="https://naklitechie.github.io/" target="_blank">Chirag Patnaik (NakliTechie)</a> — part of a series of single-file browser-native tools.</p>
+        <h3>Source</h3>
+        <ul>
+          <li>App — <a href="https://github.com/NakliTechie/SansadLocal" target="_blank">github.com/NakliTechie/SansadLocal</a> · live at <a href="https://sansadlocal.naklitechie.com" target="_blank">sansadlocal.naklitechie.com</a></li>
+          <li>Data mirror — <a href="https://github.com/NakliTechie/parliamentwatch-data" target="_blank">github.com/NakliTechie/parliamentwatch-data</a></li>
+          <li>Upstream — <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank">github.com/pranaykotas/parliamentwatch</a></li>
+        </ul>
+      </div>
     </div>
   </div>
 </div>
@@ -813,7 +900,6 @@ main {
 <div class="footer-nav">
   <a href="https://naklitechie.github.io/" target="_blank" rel="noopener">&#11013; More projects</a>
   <a href="https://github.com/NakliTechie/SansadLocal" target="_blank" rel="noopener">&#9000; Source</a>
-  <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank" rel="noopener">Upstream</a>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1279,9 +1365,7 @@ function openReportByKey(key) {
 }
 
 function resetReportDialog() {
-  document.getElementById('summaryBox').textContent = 'No summary yet.';
-  document.getElementById('copySummaryBtn').style.display = 'none';
-  document.getElementById('chatThread').innerHTML = `<div class="chat-msg system">Ask anything about this report. Your question + the report text are sent to the AI you configured (local Gemma or BYOK).</div>`;
+  state.dialogChatHTML = '';  // per-report chat is transient; cleared on each new report
 }
 
 function renderDetailsTab(r) {
@@ -1332,14 +1416,60 @@ function switchReportTab(name) {
   document.querySelectorAll('#reportModal .tab-pane').forEach(p => p.classList.remove('active'));
   document.getElementById(name + 'Tab').classList.add('active');
   if (name === 'text') loadTextTab();
-  if (name === 'summary') {
-    const r = state.selectedReport;
-    const cached = r && state.cache.summaries[reportKey(r)];
-    if (cached) {
-      document.getElementById('summaryBox').textContent = cached;
-      document.getElementById('copySummaryBtn').style.display = '';
-    }
+  if (name === 'summary') renderSummaryTab();
+  if (name === 'chat') renderChatTab();
+}
+
+function renderSummaryTab() {
+  const tab = document.getElementById('summaryTab');
+  const r = state.selectedReport;
+  if (!r) { tab.innerHTML = ''; return; }
+  if (!isAIUsable()) {
+    tab.innerHTML = aiNotReadyHTML();
+    return;
   }
+  const cached = state.cache.summaries[reportKey(r)];
+  tab.innerHTML = `
+    <div class="summary-actions">
+      <span class="label">Generate a plain-English summary using your configured AI:</span>
+      <button class="primary" id="generateSummaryBtn">${cached ? 'Regenerate' : 'Generate'}</button>
+      <button class="ghost sm" id="copySummaryBtn" ${cached ? '' : 'style="display:none"'}>Copy</button>
+    </div>
+    <div class="summary-box" id="summaryBox">${cached ? escapeHtml(cached) : 'No summary yet.'}</div>
+  `;
+  document.getElementById('generateSummaryBtn').addEventListener('click', generateSummary);
+  document.getElementById('copySummaryBtn').addEventListener('click', () => {
+    navigator.clipboard.writeText(document.getElementById('summaryBox').textContent || '');
+    showToast('Copied');
+  });
+}
+
+function renderChatTab() {
+  const tab = document.getElementById('chatTab');
+  const r = state.selectedReport;
+  if (!r) { tab.innerHTML = ''; return; }
+  if (!isAIUsable()) {
+    tab.innerHTML = aiNotReadyHTML();
+    return;
+  }
+  const threadHTML = state.dialogChatHTML
+    || `<div class="chat-msg system">Ask anything about this report. Your question + the report text are sent to the AI you configured (local Gemma or BYOK).</div>`;
+  tab.innerHTML = `
+    <div class="chat-thread" id="chatThread">${threadHTML}</div>
+    <div class="chat-input-row">
+      <textarea id="chatInput" rows="2" placeholder="Ask a question about this report..."></textarea>
+      <button class="primary" id="chatSendBtn">Send</button>
+      <button class="ghost sm" id="chatStopBtn" style="display:none">Stop</button>
+    </div>
+  `;
+  document.getElementById('chatSendBtn').addEventListener('click', chatSend);
+  document.getElementById('chatStopBtn').addEventListener('click', aiStop);
+  document.getElementById('chatInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); }
+  });
+  // Scroll to bottom in case there's existing thread content
+  const t = document.getElementById('chatThread');
+  if (t) t.scrollTop = t.scrollHeight;
 }
 
 // ── AI: Local worker ──────────────────────────────
@@ -1441,11 +1571,19 @@ self.addEventListener('message', async (e) => {
     } else if (d.type === 'warmup') {
       setLoadProgress(98, 'Compiling WebGPU shaders...');
     } else if (d.type === 'ready') {
+      const wasLoading = state.ai.workerLoading;
       state.ai.workerReady = true;
       state.ai.workerLoading = false;
       setLoadProgress(100, '');
       hideLoadProgress();
       setLocalStatus('ready', MODELS[state.ai.localModel].label + ' ready');
+      // Pulse the header pill once + nudge the user toward the next step.
+      const pill = document.getElementById('aiPill');
+      pill.classList.add('pulse');
+      setTimeout(() => pill.classList.remove('pulse'), 3200);
+      if (wasLoading) {
+        showToast('AI ready — open any report and try the AI summary or Ask tab', 4000);
+      }
     } else if (d.type === 'token') {
       const r = state.ai.pendingResolvers.get(d.id);
       if (r) r.onToken(d.token);
@@ -1475,6 +1613,80 @@ function setLocalStatus(kind, text) {
   pill.classList.remove('ready', 'loading', 'error');
   if (kind) pill.classList.add(kind);
   document.getElementById('localStatusText').textContent = text;
+  refreshAIPill();
+  updateAIDependentTabs();
+}
+
+function refreshAIPill() {
+  const pill = document.getElementById('aiPill');
+  const txt  = document.getElementById('aiPillText');
+  if (!pill) return;
+  pill.classList.remove('ready', 'loading', 'error', 'api');
+  if (state.ai.mode === 'api') {
+    const cfg = getApiConfig();
+    if (!cfg.apiKey && !cfg.noAuth) {
+      txt.textContent = 'BYOK · set key';
+    } else {
+      pill.classList.add('api', 'ready');
+      const labels = { anthropic:'Anthropic', openai:'OpenAI', gemini:'Gemini', groq:'Groq', openrouter:'OpenRouter', ollama:'Ollama', custom:'Custom' };
+      txt.textContent = 'BYOK: ' + (labels[state.ai.apiProvider] || state.ai.apiProvider);
+    }
+    return;
+  }
+  // local mode
+  if (!navigator.gpu) {
+    pill.classList.add('error');
+    txt.textContent = 'No WebGPU';
+    return;
+  }
+  if (state.ai.workerReady) {
+    pill.classList.add('ready');
+    txt.textContent = MODELS[state.ai.localModel].label + ' ready';
+    return;
+  }
+  if (state.ai.workerLoading) {
+    pill.classList.add('loading');
+    txt.textContent = 'Loading model…';
+    return;
+  }
+  txt.textContent = 'AI off';
+}
+
+function isAIUsable() {
+  if (state.ai.mode === 'api') {
+    const cfg = getApiConfig();
+    return !!cfg.apiKey || !!cfg.noAuth;
+  }
+  return state.ai.workerReady;
+}
+
+function aiNotReadyHTML(action) {
+  const reason = (() => {
+    if (state.ai.mode === 'api') {
+      return 'No API key set. Open <b>Settings</b> to add a key for your chosen provider — free options include Gemini, Groq, OpenRouter, and Ollama (local).';
+    }
+    if (!navigator.gpu) {
+      return 'WebGPU isn\'t available in this browser. Switch <b>Settings → AI mode</b> to <b>BYOK</b> and add an API key (Gemini, Groq, OpenRouter all have free tiers).';
+    }
+    if (state.ai.workerLoading) {
+      return 'Local model is loading — this can take a minute on first run while shaders compile. The pill at the top right tracks progress.';
+    }
+    return 'Local model not loaded yet. Open <b>Settings</b> to load Gemma 4 (~1.5 GB the first time, instant after that), or switch to <b>BYOK</b> mode.';
+  })();
+  return `<div class="ai-empty">
+    <p>${reason}</p>
+    <div class="ai-empty-cta"><button class="primary sm" onclick="document.getElementById('settingsBtn').click()">Open Settings</button></div>
+  </div>`;
+}
+
+function updateAIDependentTabs() {
+  // Re-render the summary + chat tab affordances when AI state changes,
+  // but only if a report dialog is open.
+  if (!state.selectedReport) return;
+  const sumActive = document.getElementById('summaryTab')?.classList.contains('active');
+  const chatActive = document.getElementById('chatTab')?.classList.contains('active');
+  if (sumActive) renderSummaryTab();
+  if (chatActive) renderChatTab();
 }
 
 function showLoadProgress() { document.getElementById('loadProgress').classList.add('visible'); }
@@ -1765,6 +1977,7 @@ async function chatSend() {
   thread.appendChild(aEl);
   thread.scrollTop = thread.scrollHeight;
   input.value = '';
+  state.dialogChatHTML = thread.innerHTML;  // persist user message immediately
 
   const messages = [
     { role: 'system', content: 'You answer questions about Indian Parliamentary Standing Committee reports. Use only the supplied report text. If the answer is not present, say so.' },
@@ -1786,6 +1999,7 @@ async function chatSend() {
   } finally {
     document.getElementById('chatStopBtn').style.display = 'none';
     document.getElementById('chatSendBtn').disabled = false;
+    state.dialogChatHTML = thread.innerHTML;  // persist assistant reply after streaming finishes
   }
 }
 
@@ -1871,20 +2085,12 @@ function attachHandlers() {
     if (row) openReportByKey(row.dataset.key);
   });
 
-  // Report dialog
+  // Report dialog — chat/summary buttons are wired by their renderers
+  // (renderSummaryTab / renderChatTab) since those tabs re-render on AI state
+  // changes. Don't attach handlers to the static IDs here.
   document.getElementById('reportCloseBtn').addEventListener('click', () => closeModal('reportModal'));
   document.querySelectorAll('#reportModal .tab-btn').forEach(b => {
     b.addEventListener('click', () => switchReportTab(b.dataset.tab));
-  });
-  document.getElementById('generateSummaryBtn').addEventListener('click', generateSummary);
-  document.getElementById('copySummaryBtn').addEventListener('click', () => {
-    navigator.clipboard.writeText(document.getElementById('summaryBox').textContent || '');
-    showToast('Copied');
-  });
-  document.getElementById('chatSendBtn').addEventListener('click', chatSend);
-  document.getElementById('chatStopBtn').addEventListener('click', aiStop);
-  document.getElementById('chatInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); }
   });
 
   // Settings modal
@@ -1905,8 +2111,16 @@ function attachHandlers() {
   });
   document.getElementById('saveSettingsBtn').addEventListener('click', () => {
     applySettingsFromUI();
+    refreshAIPill();
+    updateAIDependentTabs();
     closeModal('settingsModal');
     showToast('Settings saved');
+  });
+
+  // Header AI pill — clicking it just opens settings
+  document.getElementById('aiPill').addEventListener('click', () => {
+    renderSettings();
+    openModal('settingsModal');
   });
 
   // Help modal
@@ -1916,7 +2130,7 @@ function attachHandlers() {
     b.addEventListener('click', () => {
       document.querySelectorAll('#helpModal .tab-btn').forEach(x => x.classList.toggle('active', x === b));
       document.querySelectorAll('#helpModal .tab-pane').forEach(p => p.classList.remove('active'));
-      const id = { about: 'hAbout', browse: 'hBrowse', ai: 'hAI', privacy: 'hPrivacy' }[b.dataset.htab];
+      const id = { about: 'hAbout', browse: 'hBrowse', ai: 'hAI', privacy: 'hPrivacy', credits: 'hCredits' }[b.dataset.htab];
       document.getElementById(id).classList.add('active');
     });
   });
@@ -1959,16 +2173,22 @@ async function loadCachedSummaries() {
 (async function init() {
   loadSettings();
   attachHandlers();
+  refreshAIPill();
   const ok = await fetchData();
   if (!ok) return;  // splash error already shown
   populateFilters();
   renderHeaderStats();
   applyFilters();
   loadCachedSummaries();
-  // If a model is already cached, surface that hint immediately
-  isModelCached(MODELS[state.ai.localModel].id).then(cached => {
-    if (cached) showToast('Local model cached — open Settings to load');
-  });
+  // If local mode is selected and the model is already cached on this device,
+  // auto-load it silently. The header pill tracks progress; no user action
+  // needed. First-time users still see "AI off" and can click the pill to
+  // open Settings → Load.
+  if (state.ai.mode === 'local' && navigator.gpu) {
+    isModelCached(MODELS[state.ai.localModel].id).then(cached => {
+      if (cached) loadLocalModel();
+    });
+  }
 })();
 </script>
 </body>

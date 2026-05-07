@@ -3,6 +3,7 @@
 !README.md
 !LICENSE
 !.gitignore
+!CNAME
 
 # wrangler files
 .wrangler

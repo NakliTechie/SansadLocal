@@ -2,7 +2,7 @@
 
 > Browse, search, and summarise Indian Parliamentary Committee reports — privately, on-device.
 
-**[Live demo →](https://naklitechie.github.io/SansadLocal/)** · No accounts. No keys required. No data leaves your device.
+**[Live →](https://sansadlocal.naklitechie.com)** · No accounts. No keys required. No data leaves your device.
 
 A single HTML file. All 24 Departmentally Related Standing Committees (DRSCs) — 16 chaired by Lok Sabha, 8 by Rajya Sabha. Reports scraped daily from [sansad.in](https://sansad.in), mirrored as static JSON on GitHub Pages, summarised in your browser by Gemma over WebGPU (or by your own API key, if you prefer a remote model).
 
@@ -14,7 +14,7 @@ Committee reports are how the Indian Parliament actually scrutinises the executi
 
 | Layer        | Where it lives                                                                 |
 | ------------ | ------------------------------------------------------------------------------ |
-| Data scrape  | [`naklitechie/parliamentwatch-data`](https://github.com/NakliTechie/parliamentwatch-data) — daily GH Action runs upstream's [Python scraper](https://github.com/pranaykotas/parliamentwatch) and commits the output. |
+| Data scrape  | [`naklitechie/parliamentwatch-data`](https://github.com/NakliTechie/parliamentwatch-data) — daily GH Action runs Pranay Kotasthane's [Python scraper](https://github.com/pranaykotas/parliamentwatch) and commits the output. |
 | Data hosting | GitHub Pages serves `reports.json` + `text/*.txt` with proper CORS.            |
 | App          | This repo — one `index.html`, no build step, GitHub Pages.                     |
 | AI inference | [Transformers.js v4](https://huggingface.co/docs/transformers.js) running Gemma 4 E2B on WebGPU, or any OpenAI-compatible / Anthropic API you BYOK. |
