@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Chirag Patnaik">
-<meta name="version" content="0.1.1">
+<meta name="version" content="0.2.0">
 <meta name="description" content="Browse Indian Parliamentary Committee reports with private, on-device AI. No server, no API key required, no data leaving your device.">
 <title>SansadLocal — Parliamentary Committee Reports</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f5efe2'/%3E%3Cpath d='M6 24h20M8 24V14M12 24V14M16 24V14M20 24V14M24 24V14M5 14h22L16 6z' stroke='%23cc5500' stroke-width='1.6' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -226,8 +226,26 @@ main {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-wrap: wrap;
 }
 .results-line b { color: var(--text); }
+.results-line .indexing {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--accent);
+}
+.results-line .indexing::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); animation: ai-pulse 1.4s ease-out infinite;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.toolbar button { font-size: 0.78rem; padding: 4px 10px; }
+.toolbar button:disabled { opacity: 0.45; }
 
 /* ── Reports list ──────────────────────────────── */
 .reports {
@@ -460,6 +478,11 @@ main {
   font-size: 0.78rem;
   font-style: italic;
 }
+.chat-msg.error, .chat-msg.assistant.error {
+  background: var(--red-bg) !important;
+  border: 1px solid var(--red);
+  color: var(--red);
+}
 .chat-input-row {
   display: flex;
   gap: 8px;
@@ -680,6 +703,11 @@ main {
     <button class="ghost sm" id="resetFiltersBtn" title="Reset filters">&times;</button>
   </div>
   <div class="results-line" id="resultsLine"></div>
+  <div class="toolbar" id="toolbar">
+    <button class="sm" id="batchSummariseBtn" title="Summarise all reports in the current filter that have extracted text">&#10024; Summarise filtered</button>
+    <button class="sm" id="exportMetaBtn" title="Export filtered metadata as CSV">&#11015; Metadata (CSV)</button>
+    <button class="sm" id="exportSummariesBtn" title="Export all cached AI summaries as Markdown">&#11015; Summaries (MD)</button>
+  </div>
   <div class="reports" id="reportsList"></div>
 </main>
 
@@ -1021,15 +1049,30 @@ const state = {
     apiModel: '',
     apiBaseUrl: '',
     streaming: false,
+    streamingContext: null,              // { reportKey, tab: 'summary'|'chat' } while a generation is in flight
     abortController: null,               // for fetch-based API streaming
     msgIdCounter: 0,
     pendingResolvers: new Map(),         // msgId -> { onToken, onDone, onErr }
   },
 
   cache: {
-    summaries: {},                       // reportKey -> string
+    summaries: {},                       // reportKey -> string (also acts as the live source during streaming)
     text: {},                            // reportKey -> string (in-memory only, IDB-backed)
   },
+
+  // Per-report-dialog transient chat state. Cleared on each new report. Each
+  // entry is {role:'user'|'assistant'|'error', content:string}. The renderer
+  // builds the thread from this array, so re-renders during streaming
+  // preserve the latest token. (See bug #1 — switching tabs mid-stream used
+  // to rip the in-progress assistant bubble out of the DOM.)
+  dialogChat: [],
+
+  // Background full-text index — fills in by fetching every extracted text
+  // file once. Search reads state.cache.text which this populates.
+  fullTextIndex: { loading: false, loaded: 0, total: 0, fullyLoaded: false },
+
+  // Batch summary state — set while a "Summarise filtered" run is in progress.
+  batch: { running: false, total: 0, done: 0, cancel: false },
 };
 
 // ── Storage (localStorage for settings, IDB for cache) ─
@@ -1277,7 +1320,30 @@ function renderResultsLine() {
   if (meta?.generated_at) {
     metaLine = `Mirror updated <b>${escapeHtml(meta.generated_at.replace('T', ' ').replace('Z', ' UTC'))}</b>`;
   }
-  el.innerHTML = `Showing <b>${shown}</b> of <b>${total}</b> reports across <b>${Object.keys(state.data.reports).length}</b> committees. ${metaLine}`;
+  let indexLine = '';
+  const fti = state.fullTextIndex;
+  if (fti.loading && fti.total > 0) {
+    indexLine = `<span class="indexing">Indexing ${fti.loaded}/${fti.total} for full-text search…</span>`;
+  } else if (fti.fullyLoaded && fti.total > 0) {
+    indexLine = `<span title="Full-text search active across all extracted reports">Full-text search ready (${fti.total} reports)</span>`;
+  }
+  el.innerHTML = `Showing <b>${shown}</b> of <b>${total}</b> reports across <b>${Object.keys(state.data.reports).length}</b> committees. ${metaLine} ${indexLine}`;
+
+  // Toolbar button states
+  const batchBtn = document.getElementById('batchSummariseBtn');
+  if (batchBtn) {
+    const eligible = state.filtered.filter(r => hasExtractedText(r) && !hasSummary(r));
+    batchBtn.disabled = !isAIUsable() || eligible.length === 0 || state.batch?.running;
+    batchBtn.textContent = state.batch?.running
+      ? `✨ Summarising ${state.batch.done}/${state.batch.total}…`
+      : `✨ Summarise filtered${eligible.length ? ` (${eligible.length})` : ''}`;
+  }
+  const sumBtn = document.getElementById('exportSummariesBtn');
+  if (sumBtn) {
+    const n = Object.keys(state.cache.summaries || {}).length;
+    sumBtn.disabled = n === 0;
+    sumBtn.textContent = n ? `⬇ Summaries (MD, ${n})` : '⬇ Summaries (MD)';
+  }
 }
 
 function hasExtractedText(r) {
@@ -1356,6 +1422,11 @@ function openReportByKey(key) {
   const all = getAllReports();
   const r = all.find(x => reportKey(x) === key);
   if (!r) return;
+  // If a generation is in flight for a DIFFERENT report, stop it before
+  // resetting the dialog state so we don't corrupt the new report's chat.
+  if (state.ai.streaming && state.ai.streamingContext?.reportKey !== key) {
+    aiStop();
+  }
   state.selectedReport = r;
   resetReportDialog();
   document.getElementById('reportTitle').textContent = r.title || '(untitled)';
@@ -1365,7 +1436,7 @@ function openReportByKey(key) {
 }
 
 function resetReportDialog() {
-  state.dialogChatHTML = '';  // per-report chat is transient; cleared on each new report
+  state.dialogChat = [];   // fresh chat per report; persisted in-memory only across tab switches
 }
 
 function renderDetailsTab(r) {
@@ -1428,7 +1499,23 @@ function renderSummaryTab() {
     tab.innerHTML = aiNotReadyHTML();
     return;
   }
-  const cached = state.cache.summaries[reportKey(r)];
+  const key = reportKey(r);
+  const cached = state.cache.summaries[key];
+  const isStreaming = state.ai.streamingContext?.reportKey === key
+                   && state.ai.streamingContext?.tab === 'summary';
+
+  if (isStreaming) {
+    tab.innerHTML = `
+      <div class="summary-actions">
+        <span class="label">Generating summary… (streams in below)</span>
+        <button class="ghost sm" id="stopSummaryBtn">Stop</button>
+      </div>
+      <div class="summary-box" id="summaryBox">${escapeHtml(cached || '')}</div>
+    `;
+    document.getElementById('stopSummaryBtn').addEventListener('click', aiStop);
+    return;
+  }
+
   tab.innerHTML = `
     <div class="summary-actions">
       <span class="label">Generate a plain-English summary using your configured AI:</span>
@@ -1452,14 +1539,25 @@ function renderChatTab() {
     tab.innerHTML = aiNotReadyHTML();
     return;
   }
-  const threadHTML = state.dialogChatHTML
-    || `<div class="chat-msg system">Ask anything about this report. Your question + the report text are sent to the AI you configured (local Gemma or BYOK).</div>`;
+  const key = reportKey(r);
+  const isStreaming = state.ai.streamingContext?.reportKey === key
+                   && state.ai.streamingContext?.tab === 'chat';
+
+  const messages = state.dialogChat.length
+    ? state.dialogChat
+    : [{ role: 'system', content: 'Ask anything about this report. Your question + the report text are sent to the AI you configured (local Gemma or BYOK).' }];
+
+  const threadHTML = messages.map(m => {
+    const cls = `chat-msg ${m.role}${m.error ? ' error' : ''}`;
+    return `<div class="${cls}">${escapeHtml(m.content)}</div>`;
+  }).join('');
+
   tab.innerHTML = `
     <div class="chat-thread" id="chatThread">${threadHTML}</div>
     <div class="chat-input-row">
-      <textarea id="chatInput" rows="2" placeholder="Ask a question about this report..."></textarea>
-      <button class="primary" id="chatSendBtn">Send</button>
-      <button class="ghost sm" id="chatStopBtn" style="display:none">Stop</button>
+      <textarea id="chatInput" rows="2" placeholder="Ask a question about this report..." ${isStreaming ? 'disabled' : ''}></textarea>
+      <button class="primary" id="chatSendBtn" ${isStreaming ? 'disabled' : ''}>Send</button>
+      <button class="ghost sm" id="chatStopBtn" ${isStreaming ? '' : 'style="display:none"'}>Stop</button>
     </div>
   `;
   document.getElementById('chatSendBtn').addEventListener('click', chatSend);
@@ -1467,7 +1565,6 @@ function renderChatTab() {
   document.getElementById('chatInput').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); }
   });
-  // Scroll to bottom in case there's existing thread content
   const t = document.getElementById('chatThread');
   if (t) t.scrollTop = t.scrollHeight;
 }
@@ -1932,29 +2029,37 @@ async function generateSummary() {
     showToast('Full text not available — extract pending');
     return;
   }
+  const key = reportKey(r);
   const prompt = SUMMARY_PROMPT.replace('{TEXT}', _truncateForContext(text));
   const messages = [
     { role: 'system', content: 'You are a careful, accurate summariser of policy documents.' },
     { role: 'user', content: prompt },
   ];
-  const box = document.getElementById('summaryBox');
-  box.textContent = '';
-  document.getElementById('generateSummaryBtn').disabled = true;
-  document.getElementById('copySummaryBtn').style.display = 'none';
-  let acc = '';
+
+  // Use the cache as the live source of truth so re-renders mid-stream
+  // (e.g. user switches tabs and back) pick up the latest content.
+  state.cache.summaries[key] = '';
+  state.ai.streamingContext = { reportKey: key, tab: 'summary' };
+  renderSummaryTab();   // swap to streaming UI
+
   try {
     await aiGenerate(messages, (tok) => {
-      acc += tok;
-      box.textContent = acc;
+      state.cache.summaries[key] = (state.cache.summaries[key] || '') + tok;
+      // Fast path — update the live DOM if the summary tab is currently mounted.
+      // A subsequent renderSummaryTab() call (from tab-switch) reads the
+      // cache, so detached writes don't matter.
+      const box = document.getElementById('summaryBox');
+      if (box && state.ai.streamingContext?.reportKey === key) {
+        box.textContent = state.cache.summaries[key];
+      }
     });
-    state.cache.summaries[reportKey(r)] = acc;
-    idbPut('summaries', reportKey(r), acc).catch(() => {});
-    document.getElementById('copySummaryBtn').style.display = '';
-    renderList();  // refresh badges
+    idbPut('summaries', key, state.cache.summaries[key]).catch(() => {});
   } catch (e) {
-    box.textContent = 'Error: ' + e.message;
+    state.cache.summaries[key] = (state.cache.summaries[key] || '') + '\n\n[Error: ' + e.message + ']';
   } finally {
-    document.getElementById('generateSummaryBtn').disabled = false;
+    state.ai.streamingContext = null;
+    renderSummaryTab();   // swap back to Generate/Regenerate UI
+    renderList();
   }
 }
 
@@ -1969,37 +2074,205 @@ async function chatSend() {
   const text = await fetchReportText(r);
   if (!text) { showToast('Full text not available'); return; }
 
-  // UI: append user, prep assistant bubble
-  const thread = document.getElementById('chatThread');
-  thread.insertAdjacentHTML('beforeend', `<div class="chat-msg user">${escapeHtml(q)}</div>`);
-  const aEl = document.createElement('div');
-  aEl.className = 'chat-msg assistant';
-  thread.appendChild(aEl);
-  thread.scrollTop = thread.scrollHeight;
+  // Push user + empty assistant placeholder to the message array. The
+  // renderer reads from this array, so any tab-switch round trip rebuilds
+  // the thread including the in-progress assistant content.
+  state.dialogChat.push({ role: 'user', content: q });
+  state.dialogChat.push({ role: 'assistant', content: '' });
+  state.ai.streamingContext = { reportKey: reportKey(r), tab: 'chat' };
   input.value = '';
-  state.dialogChatHTML = thread.innerHTML;  // persist user message immediately
+  renderChatTab();
 
   const messages = [
     { role: 'system', content: 'You answer questions about Indian Parliamentary Standing Committee reports. Use only the supplied report text. If the answer is not present, say so.' },
     { role: 'user', content: QA_PROMPT_PREFIX.replace('{TEXT}', _truncateForContext(text)) + q },
   ];
-  document.getElementById('chatStopBtn').style.display = '';
-  document.getElementById('chatSendBtn').disabled = true;
-  let acc = '';
+
   try {
     await aiGenerate(messages, (tok) => {
-      acc += tok;
-      aEl.textContent = acc;
-      thread.scrollTop = thread.scrollHeight;
+      const last = state.dialogChat[state.dialogChat.length - 1];
+      last.content += tok;
+      // Fast DOM update for the live tab; full re-render happens after stream ends.
+      const lastEl = document.querySelector('#chatThread .chat-msg.assistant:last-child');
+      if (lastEl) {
+        lastEl.textContent = last.content;
+        const t = document.getElementById('chatThread');
+        if (t) t.scrollTop = t.scrollHeight;
+      }
     });
   } catch (e) {
-    aEl.textContent = 'Error: ' + e.message;
-    aEl.style.background = 'var(--red-bg)';
-    aEl.style.borderColor = 'var(--red)';
+    const last = state.dialogChat[state.dialogChat.length - 1];
+    last.error = true;
+    last.content = 'Error: ' + e.message;
   } finally {
-    document.getElementById('chatStopBtn').style.display = 'none';
-    document.getElementById('chatSendBtn').disabled = false;
-    state.dialogChatHTML = thread.innerHTML;  // persist assistant reply after streaming finishes
+    state.ai.streamingContext = null;
+    renderChatTab();
+  }
+}
+
+// ── Full-text indexing (background) ──────────────
+// Pre-fetches every extracted text file referenced by manifest into
+// state.cache.text. After this finishes, the search box matches against
+// titles AND full extracted text — what the user expects from a "full-text
+// search" feature. Runs in the background after initial render. Concurrency
+// limited so we don't hammer GH Pages.
+async function preloadFullTextIndex() {
+  if (state.fullTextIndex.fullyLoaded || state.fullTextIndex.loading) return;
+  state.fullTextIndex.loading = true;
+
+  const allReports = getAllReports();
+  const withText = allReports.filter(hasExtractedText);
+  state.fullTextIndex.total = withText.length;
+  state.fullTextIndex.loaded = 0;
+
+  if (withText.length === 0) {
+    state.fullTextIndex.loading = false;
+    state.fullTextIndex.fullyLoaded = true;
+    renderResultsLine();
+    return;
+  }
+
+  const CONCURRENCY = 6;
+  let idx = 0;
+  async function worker() {
+    while (idx < withText.length) {
+      const r = withText[idx++];
+      try { await fetchReportText(r); } catch {}
+      state.fullTextIndex.loaded++;
+      // Throttle UI updates so we don't thrash on every fetch
+      if (state.fullTextIndex.loaded % 5 === 0 || state.fullTextIndex.loaded === withText.length) {
+        renderResultsLine();
+      }
+    }
+  }
+  await Promise.all(Array(CONCURRENCY).fill(0).map(worker));
+
+  state.fullTextIndex.loading = false;
+  state.fullTextIndex.fullyLoaded = true;
+  renderResultsLine();
+  // If user has an active query, refresh results — they may now match
+  // text we just loaded.
+  if (state.filters.search) applyFilters();
+}
+
+// ── Export ────────────────────────────────────────
+function _csvCell(v) {
+  if (v == null) return '';
+  const s = String(v);
+  if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function _downloadBlob(filename, mime, content) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+}
+function _ts() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
+function exportMetadataCSV() {
+  const rows = state.filtered;
+  if (!rows.length) { showToast('No reports to export'); return; }
+  const headers = [
+    'committee_key', 'committee_name', 'house', 'lok_sabha',
+    'report_number', 'title', 'category', 'date_of_presentation',
+    'date_of_adoption', 'pdf_url', 'pdf_url_hindi', 'has_text', 'has_summary',
+  ];
+  const lines = [headers.join(',')];
+  for (const r of rows) {
+    const cm = COMMITTEES[r.committee]?.name || r.committee;
+    lines.push([
+      r.committee, cm, r.house || 'L', r.lok_sabha,
+      r.report_number, r.title, r._category,
+      r.date_of_presentation || r.presented_in_ls || r.laid_in_rs || '',
+      r.date_of_adoption || '',
+      r.pdf_url || '', r.pdf_url_hindi || '',
+      hasExtractedText(r) ? 'yes' : 'no',
+      hasSummary(r) ? 'yes' : 'no',
+    ].map(_csvCell).join(','));
+  }
+  const csv = lines.join('\n') + '\n';
+  _downloadBlob(`sansadlocal-metadata-${_ts()}.csv`, 'text/csv', csv);
+  showToast(`Exported ${rows.length} reports`);
+}
+
+function exportSummariesMD() {
+  const all = getAllReports();
+  const out = [];
+  out.push(`# SansadLocal — AI summaries`);
+  out.push('');
+  out.push(`Exported ${new Date().toLocaleString('en-IN')}. Source: <https://sansadlocal.naklitechie.com>.`);
+  out.push('');
+  let n = 0;
+  for (const r of all) {
+    const key = reportKey(r);
+    const summary = state.cache.summaries[key];
+    if (!summary) continue;
+    n++;
+    const cm = COMMITTEES[r.committee]?.name || r.committee;
+    out.push('---');
+    out.push('');
+    out.push(`## ${r.title || '(untitled)'}`);
+    out.push('');
+    out.push(`*${cm} · LS${r.lok_sabha} · Report #${r.report_number}*`);
+    if (r.pdf_url) out.push(`*PDF: <${r.pdf_url}>*`);
+    out.push('');
+    out.push(summary);
+    out.push('');
+  }
+  if (!n) { showToast('No summaries cached yet'); return; }
+  _downloadBlob(`sansadlocal-summaries-${_ts()}.md`, 'text/markdown', out.join('\n'));
+  showToast(`Exported ${n} summaries`);
+}
+
+// ── Batch summarise ───────────────────────────────
+async function batchSummarise() {
+  if (state.batch.running) return;
+  if (!isAIUsable()) { showToast('AI not configured'); return; }
+
+  const eligible = state.filtered.filter(r => hasExtractedText(r) && !hasSummary(r));
+  if (!eligible.length) { showToast('No reports need summarising in this filter'); return; }
+
+  const estMins = state.ai.mode === 'local' ? Math.ceil(eligible.length * 0.7) : Math.ceil(eligible.length * 0.5);
+  if (!confirm(`Summarise ${eligible.length} reports? Estimated time: ~${estMins} minute${estMins === 1 ? '' : 's'}. You can stop anytime.`)) return;
+
+  // Close any open report dialog so the batch can hijack state.selectedReport
+  // per iteration without the user seeing the title update mid-loop.
+  closeModal('reportModal');
+
+  state.batch = { running: true, total: eligible.length, done: 0, cancel: false };
+  renderResultsLine();
+
+  for (const r of eligible) {
+    if (state.batch.cancel) break;
+    state.selectedReport = r;
+    try {
+      await generateSummary();   // writes into state.cache.summaries[key]
+    } catch (e) {
+      console.warn('batch summary failed for', reportKey(r), e);
+    }
+    state.batch.done++;
+    renderResultsLine();
+    renderList();
+  }
+
+  state.batch = { running: false, total: 0, done: 0, cancel: false };
+  renderResultsLine();
+  renderList();
+  showToast(`Batch summarise complete`);
+}
+
+function batchSummariseStop() {
+  if (state.batch.running) {
+    state.batch.cancel = true;
+    aiStop();
+    showToast('Stopping after current report…');
   }
 }
 
@@ -2135,6 +2408,14 @@ function attachHandlers() {
     });
   });
 
+  // Toolbar — export + batch summarise
+  document.getElementById('exportMetaBtn').addEventListener('click', exportMetadataCSV);
+  document.getElementById('exportSummariesBtn').addEventListener('click', exportSummariesMD);
+  document.getElementById('batchSummariseBtn').addEventListener('click', () => {
+    if (state.batch?.running) batchSummariseStop();
+    else batchSummarise();
+  });
+
   // Backdrop close
   document.querySelectorAll('.modal-bg').forEach(bg => {
     bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('open'); });
@@ -2180,6 +2461,11 @@ async function loadCachedSummaries() {
   renderHeaderStats();
   applyFilters();
   loadCachedSummaries();
+  // Kick off the background full-text index so search can match against
+  // extracted PDF content. Idempotent — if no extracted texts exist this
+  // resolves immediately. On the current corpus (~70 texts) this finishes
+  // in seconds; with the full backfill (~2600) it takes a few minutes.
+  preloadFullTextIndex();
   // If local mode is selected and the model is already cached on this device,
   // auto-load it silently. The header pill tracks progress; no user action
   // needed. First-time users still see "AI off" and can click the pill to
