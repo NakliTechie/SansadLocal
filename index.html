@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Chirag Patnaik">
-<meta name="version" content="0.5.1">
+<meta name="version" content="0.5.2">
 <meta name="description" content="Browse Indian Parliamentary Committee reports with private, on-device AI. No server, no API key required, no data leaving your device.">
 <title>SansadLocal — Parliamentary Committee Reports</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f5efe2'/%3E%3Cpath d='M6 24h20M8 24V14M12 24V14M16 24V14M20 24V14M24 24V14M5 14h22L16 6z' stroke='%23cc5500' stroke-width='1.6' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -2751,25 +2751,39 @@ async function loadCachedChats() {
 }
 
 async function loadCachedTexts() {
-  // Bulk-hydrate every cached extracted-text into state.cache.text in one
-  // IDB transaction. This makes preloadFullTextIndex idempotent across
-  // sessions — on reload, every text is already in memory and we only
-  // need to network-fetch reports the mirror has newly extracted.
+  // Bulk-hydrate every cached extracted-text into state.cache.text. Validate
+  // each entry against the current manifest — pre-v0.4 sessions stored text
+  // keyed by `committee|<ls>|<num>` for every LS variant of a given number,
+  // because file paths weren't LS-namespaced. After v0.4's LS-prefix
+  // migration only one of those variants has an actual file on the mirror
+  // (typically the highest LS); the others are stale orphans whose content
+  // doesn't match the LS the key claims. Drop them as we walk so search
+  // doesn't match against ghost entries.
   try {
     const db = await openIDB();
     return await new Promise((resolve, reject) => {
-      const tx = db.transaction('texts', 'readonly');
+      const tx = db.transaction('texts', 'readwrite');
       const store = tx.objectStore('texts');
       const req = store.openCursor();
-      let count = 0;
+      let hydrated = 0, dropped = 0;
       req.onsuccess = (e) => {
         const c = e.target.result;
         if (c) {
-          state.cache.text[c.key] = c.value;
-          count++;
+          const [committee, ls, num] = String(c.key).split('|');
+          const safeNum = String(num ?? '').replace(/\//g, '-').replace(/\s+/g, '_');
+          const mkey = ls ? `LS${ls}_${safeNum}` : safeNum;
+          const validInManifest = !!state.data.manifest?.texts?.[committee]?.[mkey];
+          if (validInManifest) {
+            state.cache.text[c.key] = c.value;
+            hydrated++;
+          } else {
+            c.delete();   // orphan — clean up
+            dropped++;
+          }
           c.continue();
         } else {
-          resolve(count);
+          if (dropped) console.log(`loadCachedTexts: hydrated ${hydrated}, dropped ${dropped} stale orphan entries`);
+          resolve(hydrated);
         }
       };
       req.onerror = () => reject(req.error);
