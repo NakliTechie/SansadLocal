@@ -1,41 +1,77 @@
 # SansadLocal
 
-> Browse, search, and summarise Indian Parliamentary Committee reports — privately, on-device.
+> Browse, search, and summarise reports from India's 24 Parliamentary Standing Committees — privately, in your browser.
 
-**[Live →](https://sansadlocal.naklitechie.com)** · No accounts. No keys required. No data leaves your device.
+**[Live →](https://sansadlocal.naklitechie.com)** · **[User guide →](https://sansadlocal.naklitechie.com/guide/)**
 
-A single HTML file. All 24 Departmentally Related Standing Committees (DRSCs) — 16 chaired by Lok Sabha, 8 by Rajya Sabha. Reports scraped daily from [sansad.in](https://sansad.in), mirrored as static JSON on GitHub Pages, summarised in your browser by Gemma over WebGPU (or by your own API key, if you prefer a remote model).
+No accounts. No keys required. No data leaves your device.
+
+![SansadLocal main view](guide/img/01-overview.jpg)
+
+## What it does
+
+- **Browse** every report from all 24 Departmentally Related Standing Committees (DRSCs) — 16 chaired by Lok Sabha, 8 by Rajya Sabha. **14,700+ reports** across LS14–18.
+- **Search** — title + full-text across every PDF the mirror has extracted. Categories auto-tagged (Demand for Grants, Action Taken, Bills, Assurances, Subjects).
+- **AI summary** — one click → plain-English 4-section briefing of any report. Cached locally.
+- **Ask** — chat with a report. Your question + the report text + your cached summary (when one exists) go to the AI of your choice. Per-report Q&A history persists across sessions.
+- **Web search enrichment** (optional) — let Tavily / Brave / SearXNG feed recent web context into Ask.
+- **Export** — filtered metadata as CSV, generated summaries as Markdown.
 
 ## Why
 
-Committee reports are how the Indian Parliament actually scrutinises the executive. Demands for grants, bills, action-taken reports, policy subjects — non-partisan, evidence-based, and barely read. Existing portals make them hard to discover, harder to skim, and impossible to ask questions of. SansadLocal fixes the discovery layer; the AI fixes the skim layer; both happen on your machine.
+DRSCs are the institutional mechanism through which Indian Parliament actually scrutinises the executive. Their reports — on demands for grants, bills, and policy subjects — are evidence-based and non-partisan. They're also poorly indexed and rarely read. SansadLocal fixes the discovery layer; AI fixes the skim layer; both happen on your machine.
 
-## How
+## Privacy model
+
+| What | Where it lives | Leaves the browser? |
+|------|----------------|---------------------|
+| API keys (if set) | `localStorage` | Only to the provider you picked |
+| Generated AI summaries | IndexedDB (`summaries`) | No |
+| Per-report chat threads | IndexedDB (`chats`) | No |
+| Extracted PDF text | IndexedDB (`texts`) | No |
+| Model weights | Cache Storage | One-time download from Hugging Face |
+| Static report data | IndexedDB (`blobs`) | One-time fetch from GitHub Pages mirror |
+
+No analytics, no accounts, no telemetry, no SansadLocal server (we don't have one). The page is a static `index.html`.
+
+## AI options
+
+Two modes, picked in **Settings**:
+
+**Local AI** (default, free, no key) — runs entirely on your GPU via [Transformers.js](https://huggingface.co/docs/transformers.js) + WebGPU. Five models supported:
+
+| Model | Download | Notes |
+|-------|---------:|-------|
+| Gemma 4 E2B | ~1.5 GB | Default. Good balance. |
+| Gemma 4 E4B | ~4.9 GB | Stronger summaries. |
+| Ternary Bonsai 1.7B | ~470 MB | Smallest. Quick first-run. |
+| Ternary Bonsai 4B | ~1.1 GB | Sweet spot. |
+| Ternary Bonsai 8B | ~2.2 GB | 64K context. |
+
+**BYOK** — plug in your own key for Anthropic, OpenAI, Gemini, Groq, OpenRouter, Ollama, or any OpenAI-compatible endpoint. **Free tiers**: Gemini (15 RPM, 1M tokens/day), Groq (~30 RPM, fast), OpenRouter (`:free` models), Ollama (fully local). Costs of paid tiers documented in the [user guide](https://sansadlocal.naklitechie.com/guide/#costs).
+
+## Architecture
 
 | Layer        | Where it lives                                                                 |
 | ------------ | ------------------------------------------------------------------------------ |
-| Data scrape  | [`naklitechie/parliamentwatch-data`](https://github.com/NakliTechie/parliamentwatch-data) — daily GH Action runs Pranay Kotasthane's [Python scraper](https://github.com/pranaykotas/parliamentwatch) and commits the output. |
-| Data hosting | GitHub Pages serves `reports.json` + `text/*.txt` with proper CORS.            |
-| App          | This repo — one `index.html`, no build step, GitHub Pages.                     |
-| AI inference | [Transformers.js v4](https://huggingface.co/docs/transformers.js) running Gemma 4 E2B on WebGPU, or any OpenAI-compatible / Anthropic API you BYOK. |
+| Data scrape  | [`NakliTechie/parliamentwatch-data`](https://github.com/NakliTechie/parliamentwatch-data) — daily GH Action runs Pranay Kotasthane's [Python scraper](https://github.com/pranaykotas/parliamentwatch) and commits the output. |
+| Data hosting | GitHub Pages serves `reports.json` + `text/<committee>/LS<n>_<num>.txt` with proper CORS. |
+| App          | This repo — one `index.html`, no build step, served from GitHub Pages with Cloudflare in front for the custom domain. |
+| AI inference | Transformers.js v4 on WebGPU, or any OpenAI-/Anthropic-compatible API. |
+
+The two-repo split exists because `sansad.in` blocks cross-origin browser fetches. The mirror does the scraping server-side and re-publishes as static files; the browser app stays purely a presentation layer.
+
+## Credit
+
+Built on top of [**ParliamentWatch**](https://github.com/pranaykotas/parliamentwatch) by **Pranay Kotasthane**. The scraping logic, committee API map, and the original idea are his — SansadLocal repackages it as a single HTML file with on-device AI. Full credit list in the in-app Help → Credits tab.
 
 ## Local dev
-
-Open `index.html` directly, or:
 
 ```bash
 python3 -m http.server 8000
 ```
 
-Pass `?data=URL` to point at a different mirror (e.g. for local testing against `parliamentwatch-data/docs/`).
-
-## Credit
-
-Built on top of [ParliamentWatch](https://github.com/pranaykotas/parliamentwatch) by Pranay Kotasthane — the scraping logic, committee config, and the original idea are his. SansadLocal repackages it as a single file with on-device AI.
-
-## Privacy
-
-Your API key (if you set one) lives in `localStorage` and is sent only to the provider you chose. Generated summaries cache to `IndexedDB`. Model weights cache to browser Cache Storage on first load. No analytics, no accounts, no telemetry, no server (we don't have one).
+Pass `?data=URL` to override the data mirror (e.g. `?data=/parliamentwatch-data/docs/` against a sibling local checkout of the mirror repo).
 
 ## License
 
