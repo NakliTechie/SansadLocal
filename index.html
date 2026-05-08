@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Chirag Patnaik">
-<meta name="version" content="0.4.2">
+<meta name="version" content="0.5.0">
 <meta name="description" content="Browse Indian Parliamentary Committee reports with private, on-device AI. No server, no API key required, no data leaving your device.">
 <title>SansadLocal — Parliamentary Committee Reports</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f5efe2'/%3E%3Cpath d='M6 24h20M8 24V14M12 24V14M16 24V14M20 24V14M24 24V14M5 14h22L16 6z' stroke='%23cc5500' stroke-width='1.6' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -841,6 +841,20 @@ main {
       </div>
 
       <div class="settings-section">
+        <h3>Search</h3>
+        <p>By default, search matches report titles plus any reports you've already opened. Enable deep search to pre-fetch every extracted PDF's text and search across all body content. Texts cache locally after first download.</p>
+        <div class="settings-row">
+          <label for="deepSearch">Deep search</label>
+          <div>
+            <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.86rem; color:var(--text)">
+              <input type="checkbox" id="deepSearch" style="width:auto"> Enable full-text search across all extracted reports
+            </label>
+            <p id="deepSearchEstimate" style="font-size:0.78rem; color:var(--muted); margin-top:4px">—</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <h3>Web search (optional, for Ask)</h3>
         <p>Adds the option to enrich Ask answers with recent web results. Without this, Ask uses only the report itself. All providers support free tiers; key stays in this browser.</p>
         <div class="settings-row">
@@ -1164,6 +1178,13 @@ const state = {
   // Web search enrichment for Ask. Provider settings are persisted in
   // localStorage alongside the AI settings.
   search: { provider: 'none', apiKey: '', baseUrl: '' },
+
+  // Deep full-text search — opt-in. When ON, the app pre-fetches every
+  // available extracted text file on first visit (and incremental fetches on
+  // return) so search hits body content. When OFF (default, polite), only
+  // titles match by default; texts cached from individual report opens still
+  // get matched too. See the "good network citizen" thread in PENDING.md.
+  deepSearch: false,
 };
 
 // ── Storage (localStorage for settings, IDB for cache) ─
@@ -1183,6 +1204,7 @@ function loadSettings() {
     if (s.searchProvider) state.search.provider = s.searchProvider;
     if (s.searchApiKey) state.search.apiKey = s.searchApiKey;
     if (s.searchBaseUrl) state.search.baseUrl = s.searchBaseUrl;
+    if (typeof s.deepSearch === 'boolean') state.deepSearch = s.deepSearch;
   } catch (e) { console.warn('Bad settings', e); }
 }
 function saveSettings() {
@@ -1196,6 +1218,7 @@ function saveSettings() {
     searchProvider: state.search.provider,
     searchApiKey:   state.search.apiKey,
     searchBaseUrl:  state.search.baseUrl,
+    deepSearch:     state.deepSearch,
   };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 }
@@ -1437,12 +1460,28 @@ function renderResultsLine() {
   }
   let indexLine = '';
   const fti = state.fullTextIndex;
+  const cachedTexts = Object.keys(state.cache.text).length;
   if (fti.loading && fti.total > 0) {
     indexLine = `<span class="indexing">Indexing ${fti.loaded}/${fti.total} for full-text search…</span>`;
-  } else if (fti.fullyLoaded && fti.total > 0) {
+  } else if (state.deepSearch && fti.fullyLoaded && fti.total > 0) {
     indexLine = `<span title="Full-text search active across all extracted reports">Full-text search ready (${fti.total} reports)</span>`;
+  } else if (cachedTexts > 0) {
+    indexLine = `<span title="Search matches titles plus the ${cachedTexts} reports you've opened. Enable deep search in Settings to extend to all extracted reports.">Search hits titles + ${cachedTexts} cached texts</span>`;
+  } else {
+    indexLine = `<span title="Default search matches report titles only. Enable deep search in Settings to fetch all extracted text and search across body content.">Title search only · <a href="#" id="enableDeepLink" style="color:var(--accent)">enable deep search</a></span>`;
   }
   el.innerHTML = `Showing <b>${shown}</b> of <b>${total}</b> reports across <b>${Object.keys(state.data.reports).length}</b> committees. ${metaLine} ${indexLine}`;
+
+  // Inline "enable deep search" link — opens Settings instead of toggling
+  // directly so the user sees the bandwidth estimate first.
+  const enableLink = document.getElementById('enableDeepLink');
+  if (enableLink) {
+    enableLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      renderSettings();
+      openModal('settingsModal');
+    });
+  }
 
   // Toolbar button states
   const sumBtn = document.getElementById('exportSummariesBtn');
@@ -2357,13 +2396,15 @@ async function runSearch(query) {
   throw new Error('No web search provider configured');
 }
 
-// ── Full-text indexing (background) ──────────────
+// ── Full-text indexing (background, OPT-IN) ──────
 // Pre-fetches every extracted text file referenced by manifest into
 // state.cache.text. After this finishes, the search box matches against
-// titles AND full extracted text — what the user expects from a "full-text
-// search" feature. Runs in the background after initial render. Concurrency
-// limited so we don't hammer GH Pages.
+// titles AND full extracted text. Concurrency limited so we don't hammer
+// GH Pages — but the real politeness lever is that this is OFF BY DEFAULT
+// (state.deepSearch). Most sessions only fetch metadata + the texts the
+// user actively opens. Power users opt in via Settings → Search.
 async function preloadFullTextIndex() {
+  if (!state.deepSearch) return;
   if (state.fullTextIndex.fullyLoaded || state.fullTextIndex.loading) return;
   state.fullTextIndex.loading = true;
 
@@ -2493,6 +2534,21 @@ function renderSettings() {
   document.getElementById('searchProvider').value = state.search.provider || 'none';
   document.getElementById('searchApiKey').value = state.search.apiKey || '';
   document.getElementById('searchBaseUrl').value = state.search.baseUrl || '';
+  document.getElementById('deepSearch').checked = !!state.deepSearch;
+  // Estimate the download cost for the user before they enable
+  const manifestEntries = Object.values(state.data.manifest?.texts || {}).reduce((s, c) => s + Object.keys(c).length, 0);
+  const cachedEntries = Object.keys(state.cache.text).length;
+  const remaining = Math.max(0, manifestEntries - cachedEntries);
+  // Avg ~40 KB gzipped per text after compression
+  const estMB = Math.round((remaining * 40) / 1024);
+  const estLine = document.getElementById('deepSearchEstimate');
+  if (estLine) {
+    if (cachedEntries === manifestEntries) {
+      estLine.textContent = `All ${manifestEntries} extracted texts already cached locally. Toggling on uses zero new bandwidth.`;
+    } else {
+      estLine.textContent = `${manifestEntries} extracted reports total · ${cachedEntries} already cached · enabling will download ~${estMB} MB (gzipped) on next page load.`;
+    }
+  }
   toggleAISections();
   toggleProviderRows();
   toggleSearchRows();
@@ -2544,7 +2600,14 @@ function applySettingsFromUI() {
   state.search.provider = document.getElementById('searchProvider').value;
   state.search.apiKey   = document.getElementById('searchApiKey').value.trim();
   state.search.baseUrl  = document.getElementById('searchBaseUrl').value.trim();
+  const wasDeep = state.deepSearch;
+  state.deepSearch = !!document.getElementById('deepSearch').checked;
   saveSettings();
+  // If user just turned deep search ON, kick off the indexer immediately.
+  // If they turned it OFF, no rollback — already-cached texts stay cached.
+  if (state.deepSearch && !wasDeep) {
+    preloadFullTextIndex();
+  }
 }
 
 // ── Init ──────────────────────────────────────────
@@ -2739,12 +2802,17 @@ async function loadCachedTexts() {
       localStorage.setItem(INTRO_SEEN_KEY, '1');
     }
   } catch {}
-  // Hydrate any previously-fetched texts from IDB before kicking off the
-  // background indexer — so on a return visit we only network-fetch reports
-  // the mirror has newly published since last time.
+  // Hydrate any previously-fetched texts from IDB. The full-text indexer
+  // (preloadFullTextIndex) is now opt-in via Settings → Search → Deep search,
+  // but cached texts are still useful for search hits and for the Ask flow,
+  // so we always load them up. On a return visit this is fast (single IDB
+  // cursor) and brings no extra network traffic.
   loadCachedTexts().then((n) => {
-    if (n) renderList();   // refresh badges; cached text counts toward "with text" implicitly
-    preloadFullTextIndex();
+    if (n) {
+      renderList();
+      renderResultsLine();   // refresh "Search hits titles + N cached texts" copy
+    }
+    preloadFullTextIndex();   // no-op unless state.deepSearch is true
   });
   // If local mode is selected and the model is already cached on this device,
   // auto-load it silently. The header pill tracks progress; no user action

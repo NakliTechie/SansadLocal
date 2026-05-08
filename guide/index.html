@@ -234,6 +234,7 @@ img.shot {
     <li><a href="#ask">Asking questions about a report</a></li>
     <li><a href="#search-enrich">Web-search enrichment for Ask</a></li>
     <li><a href="#export">Exporting metadata and summaries</a></li>
+    <li><a href="#deep-search">Deep search (optional)</a></li>
     <li><a href="#privacy">Privacy &amp; what's cached locally</a></li>
     <li><a href="#costs">Costs &amp; limits — what's free, what isn't</a></li>
     <li><a href="#troubleshooting">Troubleshooting</a></li>
@@ -279,7 +280,7 @@ img.shot {
 <h2 id="browse">3. Browse, search, filter</h2>
 <p>Below the header, a row of filters narrows the list:</p>
 <ol>
-  <li><b>Search</b> — substring match against titles. After the app's background indexer finishes (you'll see <em>"Full-text search ready (N reports)"</em> in the status line), search also matches against body content of every extracted PDF.</li>
+  <li><b>Search</b> — substring match against titles by default. Open any report's <b>Full text</b> tab and that text becomes searchable too. To pre-fetch every extracted PDF and search across the entire corpus body content, enable <b>Deep search</b> in <b>Settings</b> (~25–500 MB download depending on backfill state — uses local cache after).</li>
   <li><b>All committees</b> — narrow to one of the 24 DRSCs.</li>
   <li><b>All Lok Sabhas</b> — most data is currently from LS18; older terms backfill over time.</li>
   <li><b>All categories</b> — auto-tagged from titles:
@@ -401,7 +402,17 @@ img.shot {
 </ul>
 <p>Both downloads happen client-side — nothing leaves your machine.</p>
 
-<h2 id="privacy">10. Privacy &amp; what's cached locally</h2>
+<h2 id="deep-search">10. Deep search (optional)</h2>
+<p>By default, search hits report titles. The instant you open a report's <b>Full text</b> tab, that body becomes searchable too — and stays cached locally forever. If you want to search across the entire corpus' body content without opening reports one-by-one, enable <b>Deep search</b> in Settings.</p>
+<ol class="flow">
+  <li>Open Settings → <b>Search</b> section.</li>
+  <li>Tick <em>"Enable full-text search across all extracted reports"</em>. The estimate line tells you how much will download.</li>
+  <li>Save. The app starts fetching every extracted text in the background (4 concurrent, throttled). Status appears above the report list as <em>"Indexing N/M…"</em>.</li>
+  <li>Once done, search now hits body content for the entire corpus. Cached locally — return visits use zero new bandwidth.</li>
+</ol>
+<div class="callout">Why opt-in? At full backfill (~14,000 reports) this would pull ~500 MB of text. Default-on would be unkind to first-time visitors on mobile and to GitHub Pages bandwidth. The opt-in flow is the polite default; power users get the same capability with one click.</div>
+
+<h2 id="privacy">11. Privacy &amp; what's cached locally</h2>
 <p>SansadLocal has no server. Everything you generate stays in your browser:</p>
 <ul>
   <li><b>API keys</b> — <code>localStorage</code>, never sent except to the provider you chose.</li>
@@ -419,7 +430,7 @@ img.shot {
 </ul>
 <p>What never happens: no analytics, no accounts, no telemetry, no server logs (no server). The page is a static <code>index.html</code> served from GitHub Pages, fronted by Cloudflare for the custom domain.</p>
 
-<h2 id="costs">11. Costs &amp; limits — what's free, what isn't</h2>
+<h2 id="costs">12. Costs &amp; limits — what's free, what isn't</h2>
 <p>Three layers of cost. The first is always free; the other two depend on your choice.</p>
 
 <h3>Layer 1 — SansadLocal infrastructure</h3>
@@ -495,7 +506,7 @@ img.shot {
 
 <div class="callout tip"><b>Recommended free path for most people.</b> Local AI = Gemma 4 E2B (or Ternary Bonsai 1.7B if low on bandwidth) + Tavily for search enrichment. You'll never see a bill.</div>
 
-<h2 id="troubleshooting">12. Troubleshooting</h2>
+<h2 id="troubleshooting">13. Troubleshooting</h2>
 <h3>The local model won't load</h3>
 <ul>
   <li>Check the AI status pill — if it says <em>"No WebGPU"</em>, the browser doesn't support WebGPU. Use Chrome 113+, Edge 113+, Brave, or Firefox 130+.</li>
