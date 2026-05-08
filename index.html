@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Chirag Patnaik">
-<meta name="version" content="0.5.3">
+<meta name="version" content="0.5.4">
 <meta name="description" content="Browse Indian Parliamentary Committee reports with private, on-device AI. No server, no API key required, no data leaving your device.">
 <title>SansadLocal — Parliamentary Committee Reports</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f5efe2'/%3E%3Cpath d='M6 24h20M8 24V14M12 24V14M16 24V14M20 24V14M24 24V14M5 14h22L16 6z' stroke='%23cc5500' stroke-width='1.6' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -1465,14 +1465,20 @@ function renderResultsLine() {
   let indexLine = '';
   const fti = state.fullTextIndex;
   const cachedTexts = Object.keys(state.cache.text).length;
+  const mirrorWithText = Object.values(state.data.manifest?.texts || {}).reduce((s, c) => s + Object.keys(c).length, 0);
   if (fti.loading && fti.total > 0) {
     indexLine = `<span class="indexing">Indexing ${fti.loaded}/${fti.total} for full-text search…</span>`;
   } else if (state.deepSearch && fti.fullyLoaded && fti.total > 0) {
     indexLine = `<span title="Full-text search active across all extracted reports">Full-text search ready (${fti.total} reports)</span>`;
+  } else if (mirrorWithText === 0) {
+    indexLine = '';
+  } else if (cachedTexts >= mirrorWithText) {
+    // User has every extracted text cached locally (full deep-search run completed earlier, then they toggled it off — or they've manually opened all of them).
+    indexLine = `<span title="Every extracted text is cached locally; search hits all body content.">Search: titles + all ${mirrorWithText} extracted texts (cached)</span>`;
   } else if (cachedTexts > 0) {
-    indexLine = `<span title="Search matches titles plus the ${cachedTexts} reports you've opened. Enable deep search in Settings to extend to all extracted reports.">Search hits titles + ${cachedTexts} cached texts</span>`;
+    indexLine = `<span>Search: titles + <b>${cachedTexts}</b> of <b>${mirrorWithText}</b> texts cached · <a href="#" id="enableDeepLink" style="color:var(--accent)">fetch remaining ${mirrorWithText - cachedTexts}?</a></span>`;
   } else {
-    indexLine = `<span title="Default search matches report titles only. Enable deep search in Settings to fetch all extracted text and search across body content.">Title search only · <a href="#" id="enableDeepLink" style="color:var(--accent)">enable deep search</a></span>`;
+    indexLine = `<span>Title search only · <b>${mirrorWithText}</b> texts on mirror · <a href="#" id="enableDeepLink" style="color:var(--accent)">enable deep search</a></span>`;
   }
   el.innerHTML = `Showing <b>${shown}</b> of <b>${total}</b> reports across <b>${Object.keys(state.data.reports).length}</b> committees. ${metaLine} ${indexLine}`;
 
