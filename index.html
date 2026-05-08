@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Chirag Patnaik">
-<meta name="version" content="0.3.2">
+<meta name="version" content="0.4.0">
 <meta name="description" content="Browse Indian Parliamentary Committee reports with private, on-device AI. No server, no API key required, no data leaving your device.">
 <title>SansadLocal — Parliamentary Committee Reports</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f5efe2'/%3E%3Cpath d='M6 24h20M8 24V14M12 24V14M16 24V14M20 24V14M24 24V14M5 14h22L16 6z' stroke='%23cc5500' stroke-width='1.6' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -1241,6 +1241,14 @@ function reportKey(r) {
 function safeReportNum(num) {
   return String(num ?? '').replace(/\//g, '-').replace(/\s+/g, '_');
 }
+// Manifest / on-disk file id is LS<lok_sabha>_<safe-num> — uniquely identifies
+// a (committee, lok_sabha, report_number) tuple. Pre-v0.4 we used just the
+// number, which collapsed multi-LS variants into one file on disk and lit
+// up `hasExtractedText` for unrelated reports. See PENDING.md.
+function manifestKey(r) {
+  if (r.lok_sabha == null) return safeReportNum(r.report_number);
+  return `LS${r.lok_sabha}_${safeReportNum(r.report_number)}`;
+}
 function categoriseReport(r) {
   const t = (r.title || '').trim();
   if (!t) return null;
@@ -1349,8 +1357,8 @@ async function fetchReportText(report) {
   } catch {}
 
   // Manifest tells us if the mirror has it
-  const safe = safeReportNum(report.report_number);
-  const entry = state.data.manifest?.texts?.[report.committee]?.[safe];
+  const mkey = manifestKey(report);
+  const entry = state.data.manifest?.texts?.[report.committee]?.[mkey];
   if (!entry) return null;
 
   const url = DATA_BASE_URL + entry.url;
@@ -1389,7 +1397,6 @@ function applyFilters() {
     if (q) {
       const hay = (r.title || '').toLowerCase();
       // Cheap full-text: also include cached text if available
-      const safe = safeReportNum(r.report_number);
       const cachedText = state.cache.text[reportKey(r)];
       const hit = hay.includes(q) || (cachedText && cachedText.toLowerCase().includes(q));
       if (!hit) return false;
@@ -1440,8 +1447,8 @@ function renderResultsLine() {
 }
 
 function hasExtractedText(r) {
-  const safe = safeReportNum(r.report_number);
-  return !!state.data.manifest?.texts?.[r.committee]?.[safe];
+  const mkey = manifestKey(r);
+  return !!state.data.manifest?.texts?.[r.committee]?.[mkey];
 }
 function hasSummary(r) {
   return !!state.cache.summaries[reportKey(r)];
@@ -1538,7 +1545,6 @@ function resetReportDialog() {
 
 function renderDetailsTab(r) {
   const committee = COMMITTEES[r.committee]?.name || r.committee;
-  const safe = safeReportNum(r.report_number);
   const upstream = `https://github.com/pranaykotas/parliamentwatch`;
   document.getElementById('detailsTab').innerHTML = `
     <dl class="meta-grid">
