@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Chirag Patnaik">
-<meta name="version" content="0.4.0">
+<meta name="version" content="0.4.1">
 <meta name="description" content="Browse Indian Parliamentary Committee reports with private, on-device AI. No server, no API key required, no data leaving your device.">
 <title>SansadLocal — Parliamentary Committee Reports</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f5efe2'/%3E%3Cpath d='M6 24h20M8 24V14M12 24V14M16 24V14M20 24V14M24 24V14M5 14h22L16 6z' stroke='%23cc5500' stroke-width='1.6' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -1168,6 +1168,7 @@ const state = {
 
 // ── Storage (localStorage for settings, IDB for cache) ─
 const SETTINGS_KEY = 'sansadlocal.settings.v1';
+const INTRO_SEEN_KEY = 'sansadlocal.introSeen';
 function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -2718,6 +2719,20 @@ async function loadCachedTexts() {
   applyFilters();
   loadCachedSummaries();
   loadCachedChats();
+  // First-visit hint: auto-open the help modal once. The seen-flag lives in
+  // localStorage (per-machine, per CONV.md "one-time intro modal" pattern)
+  // separate from the settings JSON. After dismissal it never auto-shows
+  // again — user can still re-open via the ? button.
+  try {
+    if (!localStorage.getItem(INTRO_SEEN_KEY)) {
+      // Default to About tab; that pane already has the "📘 New here?
+      // Open the full user guide →" callout for users who want more.
+      document.querySelectorAll('#helpModal .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.htab === 'about'));
+      document.querySelectorAll('#helpModal .tab-pane').forEach(p => p.classList.toggle('active', p.id === 'hAbout'));
+      openModal('helpModal');
+      localStorage.setItem(INTRO_SEEN_KEY, '1');
+    }
+  } catch {}
   // Hydrate any previously-fetched texts from IDB before kicking off the
   // background indexer — so on a return visit we only network-fetch reports
   // the mirror has newly published since last time.
