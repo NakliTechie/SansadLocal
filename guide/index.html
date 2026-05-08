@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="Chirag Patnaik">
-<title>SansadLocal — User guide</title>
+<title>SansadSaar — User guide</title>
+<link rel="canonical" href="https://sansadsaar.naklitechie.com/guide/">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f5efe2'/%3E%3Cpath d='M6 24h20M8 24V14M12 24V14M16 24V14M20 24V14M24 24V14M5 14h22L16 6z' stroke='%23cc5500' stroke-width='1.6' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
 :root {
@@ -217,15 +218,15 @@ img.shot {
 <body>
 <div class="container">
 
-<p style="margin-bottom: 18px"><a href="../">← Back to SansadLocal</a></p>
+<p style="margin-bottom: 18px"><a href="../">← Back to SansadSaar</a></p>
 
-<h1>SansadLocal — User guide</h1>
+<h1>SansadSaar — User guide</h1>
 <p class="lede">A quick tour of every feature, how to set up AI, how the privacy model works, and what costs (if any) come with each option.</p>
 
 <div class="toc">
   <h3>On this page</h3>
   <ol>
-    <li><a href="#overview">What is SansadLocal?</a></li>
+    <li><a href="#overview">What is SansadSaar?</a></li>
     <li><a href="#interface">The interface at a glance</a></li>
     <li><a href="#browse">Browse, search, filter</a></li>
     <li><a href="#report">Reading a report</a></li>
@@ -241,8 +242,8 @@ img.shot {
   </ol>
 </div>
 
-<h2 id="overview">1. What is SansadLocal?</h2>
-<p>A single-file browser app that surfaces every report from India's 24 Departmentally Related Standing Committees (DRSCs) — 16 chaired by the Lok Sabha, 8 by the Rajya Sabha. Reports are scraped daily from <a href="https://sansad.in" target="_blank" rel="noopener">sansad.in</a> by an open-source GitHub Action and mirrored as static JSON on GitHub Pages. The app you're using runs entirely in your browser — there is no SansadLocal server, no account, no analytics.</p>
+<h2 id="overview">1. What is SansadSaar?</h2>
+<p>A single-file browser app that surfaces every report from India's 24 Departmentally Related Standing Committees (DRSCs) — 16 chaired by the Lok Sabha, 8 by the Rajya Sabha. Reports are scraped daily from <a href="https://sansad.in" target="_blank" rel="noopener">sansad.in</a> by an open-source GitHub Action and mirrored as static JSON on GitHub Pages. The app you're using runs entirely in your browser — there is no SansadSaar server, no account, no analytics.</p>
 <p>Three things make it different from the upstream <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank" rel="noopener">ParliamentWatch</a> (whose Python scraper powers the data mirror):</p>
 <ul>
   <li>It runs as a single HTML file — no Python, no install, no terminal.</li>
@@ -251,11 +252,11 @@ img.shot {
 </ul>
 
 <h2 id="interface">2. The interface at a glance</h2>
-<img class="shot" src="img/01-overview.jpg" alt="SansadLocal main view: header with brand, stats, AI pill, settings, help; filter row; toolbar with batch summarise + export; report list with status badges">
+<img class="shot" src="img/01-overview.jpg" alt="SansadSaar main view: header with brand, stats, AI pill, settings, help; filter row; toolbar with batch summarise + export; report list with status badges">
 <p class="caption">Main view — top header, filters, toolbar, sortable report list.</p>
 <p>The header runs across the top:</p>
 <div class="mock-header">
-  <span class="brand">SansadLocal</span>
+  <span class="brand">SansadSaar</span>
   <span class="tag">Indian Parliamentary Committee Reports</span>
   <span class="spacer"></span>
   <span style="font-size:0.78rem; color:var(--muted)"><b>2671</b> reports · <b>24</b> committees · <b>72</b> with text</span>
@@ -339,7 +340,7 @@ img.shot {
   <li>Click <b>Load</b>. First run shows a progress bar — your machine is downloading weights from Hugging Face.</li>
   <li>When the status pill says <em>"&lt;model&gt; ready"</em>, you can use AI summary and Ask in any report dialog.</li>
 </ol>
-<div class="callout tip"><b>Auto-load on return visits.</b> Once a model is cached, the next time you load SansadLocal it auto-loads in the background — no need to click Load again.</div>
+<div class="callout tip"><b>Auto-load on return visits.</b> Once a model is cached, the next time you load SansadSaar it auto-loads in the background — no need to click Load again.</div>
 <div class="callout warn"><b>Requirements.</b> WebGPU is needed. Recent Chrome / Edge / Brave (113+), Firefox 130+ on a recent device. If your browser doesn't support WebGPU the local-AI option is disabled and you'll see "No WebGPU" in the pill — switch to BYOK mode.</div>
 
 <h3>Option B — BYOK (Bring Your Own Key)</h3>
@@ -413,17 +414,17 @@ img.shot {
 <div class="callout">Why opt-in? At full backfill (~14,000 reports) this would pull ~500 MB of text. Default-on would be unkind to first-time visitors on mobile and to GitHub Pages bandwidth. The opt-in flow is the polite default; power users get the same capability with one click.</div>
 
 <h2 id="privacy">11. Privacy &amp; what's cached locally</h2>
-<p>SansadLocal has no server. Everything you generate stays in your browser:</p>
+<p>SansadSaar has no server. Everything you generate stays in your browser:</p>
 <ul>
   <li><b>API keys</b> — <code>localStorage</code>, never sent except to the provider you chose.</li>
-  <li><b>Generated summaries</b> — IndexedDB store <code>summaries</code>. Persistent across sessions. Visible in DevTools → Application → IndexedDB → <code>sansadlocal</code>.</li>
+  <li><b>Generated summaries</b> — IndexedDB store <code>summaries</code>. Persistent across sessions. Visible in DevTools → Application → IndexedDB → <code>sansadlocal</code> (legacy DB name, kept so existing data carries over).</li>
   <li><b>Extracted PDF text</b> — IndexedDB store <code>texts</code>. Once fetched, it's there for life. On return visits, only newly-published reports get pulled from the mirror.</li>
   <li><b>Model weights</b> — browser Cache Storage. ~1.5–4.9 GB depending on the model.</li>
-  <li><b>Settings</b> — <code>localStorage</code> key <code>sansadlocal.settings.v1</code>.</li>
+  <li><b>Settings</b> — <code>localStorage</code> key <code>sansadlocal.settings.v1</code> (legacy key, preserved across the rename).</li>
 </ul>
 <p>What leaves your browser:</p>
 <ul>
-  <li>Fetches to <code>naklitechie.github.io/parliamentwatch-data/</code> — the static data mirror. No tracking, no analytics.</li>
+  <li>Fetches to <code>sansad-files.naklitechie.com</code> — the static data mirror, served from Cloudflare's edge. No tracking, no analytics.</li>
   <li>Fetches to <code>huggingface.co</code> — model weights, only on first load of a given model.</li>
   <li>BYOK requests go directly to your chosen provider. Your key isn't proxied anywhere.</li>
   <li>Search-enrichment requests go directly to your chosen search provider.</li>
@@ -433,7 +434,7 @@ img.shot {
 <h2 id="costs">12. Costs &amp; limits — what's free, what isn't</h2>
 <p>Three layers of cost. The first is always free; the other two depend on your choice.</p>
 
-<h3>Layer 1 — SansadLocal infrastructure</h3>
+<h3>Layer 1 — SansadSaar infrastructure</h3>
 <table>
   <thead><tr><th>Component</th><th>Cost</th><th>Notes</th></tr></thead>
   <tbody>
@@ -483,7 +484,7 @@ img.shot {
     </tr>
     <tr>
       <td><b>Ollama</b></td>
-      <td><b>Yes — fully free.</b> Runs on your computer. Install from <a href="https://ollama.com" target="_blank">ollama.com</a>, then <code>ollama pull llama3.2</code>. Set <code>OLLAMA_ORIGINS=https://sansadlocal.naklitechie.com</code> when starting Ollama so the browser can reach it.</td>
+      <td><b>Yes — fully free.</b> Runs on your computer. Install from <a href="https://ollama.com" target="_blank">ollama.com</a>, then <code>ollama pull llama3.2</code>. Set <code>OLLAMA_ORIGINS=https://sansadsaar.naklitechie.com</code> when starting Ollama so the browser can reach it.</td>
       <td>—</td>
     </tr>
     <tr>
@@ -521,19 +522,19 @@ img.shot {
 
 <h3>Ollama returns CORS errors</h3>
 <p>Ollama's HTTP API doesn't allow cross-origin requests by default. Set <code>OLLAMA_ORIGINS</code> when starting Ollama:</p>
-<pre style="background:var(--surface2); border:1px solid var(--border); padding:10px; border-radius:4px; font-family:ui-monospace,Menlo,monospace; font-size:0.85rem; overflow-x:auto">OLLAMA_ORIGINS="https://sansadlocal.naklitechie.com" ollama serve</pre>
+<pre style="background:var(--surface2); border:1px solid var(--border); padding:10px; border-radius:4px; font-family:ui-monospace,Menlo,monospace; font-size:0.85rem; overflow-x:auto">OLLAMA_ORIGINS="https://sansadsaar.naklitechie.com" ollama serve</pre>
 <p>If you opened the app via <code>http://localhost:8000</code> for local dev, set <code>OLLAMA_ORIGINS=http://localhost:8000</code> instead.</p>
 
 <h3>The mirror is missing data</h3>
-<p>The daily action runs at 04:30 UTC (10:00 IST). If a new report shows up on sansad.in mid-day, it'll appear in SansadLocal the next morning. Settings → <b>Refresh from mirror</b> force-fetches; on a fresh visit the latest data loads automatically.</p>
+<p>The daily action runs at 04:30 UTC (10:00 IST). If a new report shows up on sansad.in mid-day, it'll appear in SansadSaar the next morning. Settings → <b>Refresh from mirror</b> force-fetches; on a fresh visit the latest data loads automatically.</p>
 
 <h3>Where do credits live?</h3>
 <img class="shot" src="img/08-help-credits.jpg" alt="Help modal Credits tab showing Built on top of ParliamentWatch, open-source pieces (Transformers.js, Gemma 4 ONNX, pypdf, GitHub Pages), built by Chirag Patnaik, source links">
 <p class="caption">Help → Credits tab. Open from the <span class="kbd">?</span> button in the header.</p>
-<p>Built on top of <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank">ParliamentWatch</a> by Pranay Kotasthane — the scraper, committee config, and original idea are his. SansadLocal repackages it with on-device AI. Full credit list in the Help → Credits tab.</p>
+<p>Built on top of <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank">ParliamentWatch</a> by Pranay Kotasthane — the scraper, committee config, and original idea are his. SansadSaar repackages it with on-device AI. Full credit list in the Help → Credits tab.</p>
 
 <div class="footer-back">
-  <a href="../">← Back to SansadLocal</a> ·
+  <a href="../">← Back to SansadSaar</a> ·
   <a href="https://github.com/NakliTechie/SansadLocal" target="_blank">Source on GitHub</a>
 </div>
 

@@ -6,7 +6,8 @@
 <meta name="author" content="Chirag Patnaik">
 <meta name="version" content="0.5.8">
 <meta name="description" content="Browse Indian Parliamentary Committee reports with private, on-device AI. No server, no API key required, no data leaving your device.">
-<title>SansadLocal — Parliamentary Committee Reports</title>
+<title>SansadSaar — Parliamentary Committee Reports</title>
+<link rel="canonical" href="https://sansadsaar.naklitechie.com/">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f5efe2'/%3E%3Cpath d='M6 24h20M8 24V14M12 24V14M16 24V14M20 24V14M24 24V14M5 14h22L16 6z' stroke='%23cc5500' stroke-width='1.6' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
 /* Rangrez · india-01 · LUTYENS — sandstone facade, kesari saffron, ink shadows */
@@ -674,7 +675,7 @@ main {
 <body>
 
 <div id="splash">
-  <div class="splash-logo">SansadLocal</div>
+  <div class="splash-logo">SansadSaar</div>
   <div class="splash-tag">Loading committee report data — first time may take a moment.</div>
   <div class="splash-spinner"></div>
   <div class="splash-error" id="splashError"></div>
@@ -682,7 +683,7 @@ main {
 
 <header>
   <div class="brand">
-    <span class="brand-name">SansadLocal</span>
+    <span class="brand-name">SansadSaar</span>
     <span class="brand-tag">Indian Parliamentary Committee Reports</span>
   </div>
   <div class="spacer"></div>
@@ -893,7 +894,7 @@ main {
 <div class="modal-bg" id="helpModal">
   <div class="modal" style="max-width:680px">
     <div class="modal-header">
-      <div class="modal-title">SansadLocal — Help</div>
+      <div class="modal-title">SansadSaar — Help</div>
       <button class="icon-btn" id="helpCloseBtn" aria-label="Close">&times;</button>
     </div>
     <div class="modal-tabs">
@@ -906,7 +907,7 @@ main {
     <div class="modal-body">
       <div class="tab-pane active" id="hAbout">
         <p style="background:var(--accent-bg); border:1px solid var(--accent); border-radius:6px; padding:10px 14px; margin-bottom:14px; font-weight:500;">📘 New here? <a href="guide/" target="_blank" rel="noopener" style="font-weight:700;">Open the full user guide →</a> — covers AI setup, BYOK costs/limits, web search enrichment, privacy details.</p>
-        <h3>What is SansadLocal?</h3>
+        <h3>What is SansadSaar?</h3>
         <p>A single-file browser app to browse, search, and summarise reports from India's 24 Departmentally Related Standing Committees (DRSCs) — 16 chaired by Lok Sabha, 8 by Rajya Sabha. The reports are scraped daily from <a href="https://sansad.in" target="_blank" rel="noopener">sansad.in</a> and mirrored as static JSON/text on GitHub Pages so this page can read them with no server, no auth, no API key.</p>
         <h3>Why committee reports matter</h3>
         <p>DRSCs are the most robust institutional mechanism through which Indian Parliament scrutinises the executive. Their reports — on demands for grants, bills, and policy subjects — are evidence-based and non-partisan. They're also poorly indexed and rarely read.</p>
@@ -950,7 +951,7 @@ main {
         </ul>
         <h3>What leaves your browser</h3>
         <ul>
-          <li>Fetches to <code>naklitechie.github.io/parliamentwatch-data/</code> — static JSON + text files. No tracking.</li>
+          <li>Fetches to <code>sansad-files.naklitechie.com</code> — static JSON + text files served from Cloudflare's edge. No tracking.</li>
           <li>Fetches to <code>huggingface.co</code> — model weights, only on first Gemma load.</li>
           <li>If you use BYOK: requests directly to your provider. Your key isn't proxied through any other server.</li>
         </ul>
@@ -962,7 +963,7 @@ main {
       </div>
       <div class="tab-pane" id="hCredits">
         <h3>Built by</h3>
-        <p><b>Chirag Patnaik</b> — SansadLocal is part of a series of single-file browser-native tools.</p>
+        <p><b>Chirag Patnaik</b> — SansadSaar is part of a series of single-file browser-native tools.</p>
         <p style="font-size:0.86rem; color:var(--muted);">
           <a href="https://naklitechie.github.io/" target="_blank" rel="noopener">All projects</a> ·
           <a href="https://chiragpatnaik.com" target="_blank" rel="noopener">chiragpatnaik.com</a> ·
@@ -980,7 +981,7 @@ main {
         </ul>
         <h3>Source</h3>
         <ul>
-          <li>App — <a href="https://github.com/NakliTechie/SansadLocal" target="_blank">github.com/NakliTechie/SansadLocal</a> · live at <a href="https://sansadlocal.naklitechie.com" target="_blank">sansadlocal.naklitechie.com</a></li>
+          <li>App — <a href="https://github.com/NakliTechie/SansadLocal" target="_blank">github.com/NakliTechie/SansadLocal</a> (repo rename pending) · live at <a href="https://sansadsaar.naklitechie.com" target="_blank">sansadsaar.naklitechie.com</a></li>
           <li>Data mirror — <a href="https://github.com/NakliTechie/parliamentwatch-data" target="_blank">github.com/NakliTechie/parliamentwatch-data</a></li>
           <li>Upstream — <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank">github.com/pranaykotas/parliamentwatch</a></li>
         </ul>
@@ -2155,7 +2156,7 @@ async function generateOpenAICompatible(messages, onToken, signal, cfg) {
   // OpenRouter requires HTTP-Referer or X-Title for free tier
   if (cfg.provider === 'openrouter') {
     headers['HTTP-Referer'] = location.origin;
-    headers['X-Title'] = 'SansadLocal';
+    headers['X-Title'] = 'SansadSaar';
   }
   const res = await fetch(cfg.url, {
     method: 'POST',
@@ -2515,16 +2516,16 @@ function exportMetadataCSV() {
     ].map(_csvCell).join(','));
   }
   const csv = lines.join('\n') + '\n';
-  _downloadBlob(`sansadlocal-metadata-${_ts()}.csv`, 'text/csv', csv);
+  _downloadBlob(`sansadsaar-metadata-${_ts()}.csv`, 'text/csv', csv);
   showToast(`Exported ${rows.length} reports`);
 }
 
 function exportSummariesMD() {
   const all = getAllReports();
   const out = [];
-  out.push(`# SansadLocal — AI summaries`);
+  out.push(`# SansadSaar — AI summaries`);
   out.push('');
-  out.push(`Exported ${new Date().toLocaleString('en-IN')}. Source: <https://sansadlocal.naklitechie.com>.`);
+  out.push(`Exported ${new Date().toLocaleString('en-IN')}. Source: <https://sansadsaar.naklitechie.com>.`);
   out.push('');
   let n = 0;
   for (const r of all) {
@@ -2544,7 +2545,7 @@ function exportSummariesMD() {
     out.push('');
   }
   if (!n) { showToast('No summaries cached yet'); return; }
-  _downloadBlob(`sansadlocal-summaries-${_ts()}.md`, 'text/markdown', out.join('\n'));
+  _downloadBlob(`sansadsaar-summaries-${_ts()}.md`, 'text/markdown', out.join('\n'));
   showToast(`Exported ${n} summaries`);
 }
 

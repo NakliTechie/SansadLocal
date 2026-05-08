@@ -1,12 +1,12 @@
-# SansadLocal
+# SansadSaar
 
 > Browse, search, and summarise reports from India's 24 Parliamentary Standing Committees — privately, in your browser.
 
-**[Live →](https://sansadlocal.naklitechie.com)** · **[User guide →](https://sansadlocal.naklitechie.com/guide/)**
+**[Live →](https://sansadsaar.naklitechie.com)** · **[User guide →](https://sansadsaar.naklitechie.com/guide/)**
 
 No accounts. No keys required. No data leaves your device.
 
-![SansadLocal main view](guide/img/01-overview.jpg)
+![SansadSaar main view](guide/img/01-overview.jpg)
 
 ## What it does
 
@@ -19,7 +19,7 @@ No accounts. No keys required. No data leaves your device.
 
 ## Why
 
-DRSCs are the institutional mechanism through which Indian Parliament actually scrutinises the executive. Their reports — on demands for grants, bills, and policy subjects — are evidence-based and non-partisan. They're also poorly indexed and rarely read. SansadLocal fixes the discovery layer; AI fixes the skim layer; both happen on your machine.
+DRSCs are the institutional mechanism through which Indian Parliament actually scrutinises the executive. Their reports — on demands for grants, bills, and policy subjects — are evidence-based and non-partisan. They're also poorly indexed and rarely read. SansadSaar fixes the discovery layer; AI fixes the skim layer; both happen on your machine.
 
 ## Privacy model
 
@@ -32,7 +32,7 @@ DRSCs are the institutional mechanism through which Indian Parliament actually s
 | Model weights | Cache Storage | One-time download from Hugging Face |
 | Static report data | IndexedDB (`blobs`) | One-time fetch from GitHub Pages mirror |
 
-No analytics, no accounts, no telemetry, no SansadLocal server (we don't have one). The page is a static `index.html`.
+No analytics, no accounts, no telemetry, no SansadSaar server (we don't have one). The page is a static `index.html`.
 
 ## AI options
 
@@ -48,7 +48,7 @@ Two modes, picked in **Settings**:
 | Ternary Bonsai 4B | ~1.1 GB | Sweet spot. |
 | Ternary Bonsai 8B | ~2.2 GB | 64K context. |
 
-**BYOK** — plug in your own key for Anthropic, OpenAI, Gemini, Groq, OpenRouter, Ollama, or any OpenAI-compatible endpoint. **Free tiers**: Gemini (15 RPM, 1M tokens/day), Groq (~30 RPM, fast), OpenRouter (`:free` models), Ollama (fully local). Costs of paid tiers documented in the [user guide](https://sansadlocal.naklitechie.com/guide/#costs).
+**BYOK** — plug in your own key for Anthropic, OpenAI, Gemini, Groq, OpenRouter, Ollama, or any OpenAI-compatible endpoint. **Free tiers**: Gemini (15 RPM, 1M tokens/day), Groq (~30 RPM, fast), OpenRouter (`:free` models), Ollama (fully local). Costs of paid tiers documented in the [user guide](https://sansadsaar.naklitechie.com/guide/#costs).
 
 ## Architecture
 
@@ -63,7 +63,7 @@ The two-repo split exists because `sansad.in` blocks cross-origin browser fetche
 
 ## Credit
 
-Built on top of [**ParliamentWatch**](https://github.com/pranaykotas/parliamentwatch) by **Pranay Kotasthane**. The scraping logic, committee API map, and the original idea are his — SansadLocal repackages it as a single HTML file with on-device AI. Full credit list in the in-app Help → Credits tab.
+Built on top of [**ParliamentWatch**](https://github.com/pranaykotas/parliamentwatch) by **Pranay Kotasthane**. The scraping logic, committee API map, and the original idea are his — SansadSaar repackages it as a single HTML file with on-device AI. Full credit list in the in-app Help → Credits tab.
 
 ## Local dev
 
