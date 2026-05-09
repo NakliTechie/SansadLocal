@@ -379,13 +379,10 @@ function renderResultsLine() {
       : state.bundleLoading ? 'bundle' : 'index';
     indexLine = `<span class="indexing">Loading search ${what}…</span>`;
   } else if (state.deepSearch && state.bundleLoaded && bundle) {
-    const idxBit = state.indexLoaded && idx
-      ? ` + ${idx.vocab_size.toLocaleString()} body tokens`
-      : '';
     const tooltip = idx
       ? `Search hits titles + first ${bundle.head_chars} chars of every report, plus body-token presence across the corpus.`
       : `Search hits titles + first ${bundle.head_chars} chars of every report.`;
-    indexLine = `<span title="${escapeHtml(tooltip)}">Full-text search ready · ${bundle.total} reports${idxBit}</span>`
+    indexLine = `<span title="${escapeHtml(tooltip)}">Full-text search · ${bundle.total} reports</span>`
               + ` · <label class="match-any-toggle"><input type="checkbox" id="matchAnyToggle"${state.matchAny ? ' checked' : ''}>match any</label>`;
   } else if (mirrorWithText === 0) {
     indexLine = '';
