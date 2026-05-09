@@ -109,11 +109,13 @@ export function relativeTime(iso) {
   const d = iso instanceof Date ? iso : new Date(iso);
   if (isNaN(d)) return null;
   const secs = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (secs < 60)        return 'just now';
-  if (secs < 3600)      return Math.floor(secs / 60) + ' min ago';
-  if (secs < 86400)     return Math.floor(secs / 3600) + ' hours ago';
-  if (secs < 86400 * 2) return 'a day ago';
-  return Math.floor(secs / 86400) + ' days ago';
+  if (secs < 60) return 'just now';
+  if (secs < 3600) return Math.floor(secs / 60) + ' min ago';
+  const hours = Math.floor(secs / 3600);
+  if (hours < 24) return hours === 1 ? '1 hour ago' : hours + ' hours ago';
+  const days = Math.floor(secs / 86400);
+  if (days < 2) return 'a day ago';
+  return days + ' days ago';
 }
 
 // Severity bucket for a corpus status pill. Drives the colour: ready=green,
