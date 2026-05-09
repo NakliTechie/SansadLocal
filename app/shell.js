@@ -23,14 +23,15 @@ const PRODUCT = 'sansadsaar';
 const VERSION = '1.0a-phase1';
 
 // Data mirror URL. ?data=ghpages or ?data=<url> overrides for local dev /
-// alternate origin testing. Default = the existing CF Workers + Static Assets
-// deployment at sansad-files.naklitechie.com (will join sansadsaar-data alias
-// in spec phase 3 — both URLs serve the same Worker).
+// alternate origin testing. Default = sansadsaar-data.naklitechie.com (CF
+// Workers + Static Assets, post-phase-3). sansad-files.naklitechie.com
+// continues to serve the same Worker as a legacy alias — pass
+// ?data=https://sansad-files.naklitechie.com/ to use it explicitly.
 const DATA_BASE_URL = (() => {
   const u = new URL(window.location.href);
   const override = u.searchParams.get('data');
   if (override === 'ghpages') return 'https://naklitechie.github.io/parliamentwatch-data/';
-  return override || 'https://sansad-files.naklitechie.com/';
+  return override || 'https://sansadsaar-data.naklitechie.com/';
 })();
 
 // Local-AI model registry. Multimodal uses AutoProcessor +
