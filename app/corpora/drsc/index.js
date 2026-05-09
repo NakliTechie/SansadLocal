@@ -14,6 +14,12 @@ import {
   loadSettings, saveSettings,
 } from '../../deps.js';
 
+// All corpus data lives under `<dataBaseUrl>/<CORPUS_PREFIX>/...` after
+// v1.0a phase 2. The mirror moved DRSC's files into docs/drsc/ on the
+// CF Workers side; we mirror that here. Future corpora set their own
+// prefix in their corpus module — DRSC's "drsc/" stays.
+const CORPUS_PREFIX = 'drsc/';
+
 // ── Constants ───────────────────────────────────────────────────────────────
 
 // 24 DRSCs — committee key → display name. Mirrors upstream parliamentwatch
@@ -219,9 +225,9 @@ async function fetchData(forceRefresh = false) {
 
   try {
     const [reports, manifest, meta] = await Promise.all([
-      fetch(dataUrl + 'reports.json'  + v, fetchOpts).then(r => r.ok ? r.json() : Promise.reject(`reports.json: ${r.status}`)),
-      fetch(dataUrl + 'manifest.json' + v, fetchOpts).then(r => r.ok ? r.json() : { texts: {} }).catch(() => ({ texts: {} })),
-      fetch(dataUrl + 'meta.json'     + v, fetchOpts).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(dataUrl + CORPUS_PREFIX + 'reports.json'  + v, fetchOpts).then(r => r.ok ? r.json() : Promise.reject(`reports.json: ${r.status}`)),
+      fetch(dataUrl + CORPUS_PREFIX + 'manifest.json' + v, fetchOpts).then(r => r.ok ? r.json() : { texts: {} }).catch(() => ({ texts: {} })),
+      fetch(dataUrl + CORPUS_PREFIX + 'meta.json'     + v, fetchOpts).then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     state.data.reports  = reports;
     state.data.manifest = manifest;
@@ -261,7 +267,7 @@ async function fetchReportText(report) {
   if (!entry) return null;
 
   try {
-    const res = await fetch(_deps.config.dataBaseUrl + entry.url);
+    const res = await fetch(_deps.config.dataBaseUrl + CORPUS_PREFIX + entry.url);
     if (!res.ok) return null;
     const text = await res.text();
     state.cache.text[key] = text;
@@ -833,7 +839,7 @@ async function loadSearchBundle() {
   try {
     const dataUrl = _deps.config.dataBaseUrl;
     const bucket  = Math.floor(Date.now() / 300000);
-    const res = await fetch(dataUrl + 'search-bundle.json?v=' + bucket, { cache: 'no-cache' });
+    const res = await fetch(dataUrl + CORPUS_PREFIX + 'search-bundle.json?v=' + bucket, { cache: 'no-cache' });
     if (res.ok) {
       const fresh = await res.json();
       const cachedAt = state.searchBundle?.generated_at;
@@ -900,7 +906,7 @@ async function loadSearchIndex() {
   try {
     const dataUrl = _deps.config.dataBaseUrl;
     const bucket  = Math.floor(Date.now() / 300000);
-    const res = await fetch(dataUrl + 'search-index.json?v=' + bucket, { cache: 'no-cache' });
+    const res = await fetch(dataUrl + CORPUS_PREFIX + 'search-index.json?v=' + bucket, { cache: 'no-cache' });
     if (res.ok) {
       const fresh = await res.json();
       const cachedAt = state.searchIndex?.generated_at;
