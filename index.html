@@ -101,8 +101,11 @@ header {
   display: flex;
   align-items: baseline;
   gap: 6px;
-  cursor: default;
+  text-decoration: none;
+  color: inherit;
 }
+.brand:hover { text-decoration: none; }
+.brand:hover .brand-name { color: var(--accent-hi); }
 .brand-name {
   font-weight: 800;
   font-size: 1.1rem;
@@ -759,10 +762,10 @@ mark {
 </div>
 
 <header>
-  <div class="brand">
+  <a class="brand" href="https://sansadsaar.naklitechie.com/" title="SansadSaar — home">
     <span class="brand-name">SansadSaar</span>
     <span class="brand-tag">Indian Parliamentary Committee Reports</span>
-  </div>
+  </a>
   <div class="spacer"></div>
   <div class="header-stats" id="headerStats"></div>
   <button class="ai-pill" id="aiPill" title="AI status — click to configure"><span class="ai-dot"></span><span id="aiPillText">AI off</span></button>
