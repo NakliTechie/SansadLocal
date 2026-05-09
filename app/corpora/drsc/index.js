@@ -102,11 +102,16 @@ const state = {
   // Each entry is {role:'user'|'assistant'|'system'|'error', content}.
   dialogChat: [],
 
-  // Background full-text index — fills in by fetching every extracted text
-  // file once. Search reads state.cache.text which this populates.
-  fullTextIndex: { loading: false, loaded: 0, total: 0, fullyLoaded: false },
+  // Search bundle (v0.6). Single docs/search-bundle.json the mirror
+  // generates on every cron run — title + first N chars per report.
+  // Replaces the per-text-file pre-fetch the SansadLocal "deep search"
+  // toggle used to do (~177 MB → ~3 MB gzipped).
+  // Shape: {generated_at, head_chars, total, map: Map<key, {title, head}>}
+  searchBundle: null,
+  bundleLoading: false,
+  bundleLoaded:  false,
 
-  // Deep full-text search — opt-in. ON triggers preloadFullTextIndex.
+  // Deep full-text search — opt-in. ON triggers loadSearchBundle.
   deepSearch: false,
 
   // Tracks which dialog tab is currently streaming so renders mid-flight
@@ -272,14 +277,29 @@ function applyFilters() {
   const all = getAllReports();
   const f = state.filters;
   const q = f.search.trim().toLowerCase();
+  const bundle = state.searchBundle;
   const filtered = all.filter(r => {
     if (f.committee && r.committee !== f.committee) return false;
     if (f.ls && String(r.lok_sabha) !== f.ls) return false;
     if (f.category && r._category !== f.category) return false;
     if (q) {
+      const key = reportKey(r);
       const hay = (r.title || '').toLowerCase();
-      const cachedText = state.cache.text[reportKey(r)];
-      const hit = hay.includes(q) || (cachedText && cachedText.toLowerCase().includes(q));
+      let hit = hay.includes(q);
+      // Bundle head — cheap O(1) lookup, scans the precomputed first-N-chars
+      // slice. Only consulted when the user has deep search enabled and the
+      // bundle is loaded; falls through to in-memory cached text otherwise.
+      if (!hit && state.deepSearch && bundle) {
+        const e = bundle.map.get(key);
+        if (e && e.head.toLowerCase().includes(q)) hit = true;
+      }
+      // Texts the user has actually opened (cached on demand) still count —
+      // useful for reports without bundle entries (e.g. text added since
+      // last bundle build) and for the body past the bundle's head_chars.
+      if (!hit) {
+        const cachedText = state.cache.text[key];
+        if (cachedText && cachedText.toLowerCase().includes(q)) hit = true;
+      }
       if (!hit) return false;
     }
     return true;
@@ -309,26 +329,25 @@ function renderResultsLine() {
   if (meta?.generated_at) {
     metaLine = `Mirror updated <b>${escapeHtml(meta.generated_at.replace('T', ' ').replace('Z', ' UTC'))}</b>`;
   }
+
   let indexLine = '';
-  const fti = state.fullTextIndex;
-  const cachedTexts = Object.keys(state.cache.text).length;
+  const bundle = state.searchBundle;
   const mirrorWithText = Object.values(state.data.manifest?.texts || {}).reduce((s, c) => s + Object.keys(c).length, 0);
-  if (fti.loading && fti.total > 0) {
-    indexLine = `<span class="indexing">Indexing ${fti.loaded}/${fti.total} for full-text search…</span>`;
-  } else if (state.deepSearch && fti.fullyLoaded && fti.total > 0) {
-    indexLine = `<span title="Full-text search active across all extracted reports">Full-text search ready (${fti.total} reports)</span>`;
+  if (state.bundleLoading) {
+    indexLine = `<span class="indexing">Loading search bundle…</span>`;
+  } else if (state.deepSearch && state.bundleLoaded && bundle) {
+    indexLine = `<span title="Search hits titles + first ${bundle.head_chars} chars of all extracted reports">Full-text search ready (${bundle.total} reports)</span>`;
   } else if (mirrorWithText === 0) {
     indexLine = '';
-  } else if (cachedTexts >= mirrorWithText) {
-    indexLine = `<span title="Every extracted text is cached locally; search hits all body content.">Search: titles + all ${mirrorWithText} extracted texts (cached)</span>`;
-  } else if (cachedTexts > 0) {
-    indexLine = `<span>Search: titles + <b>${cachedTexts}</b> of <b>${mirrorWithText}</b> texts cached · <a href="#" id="enableDeepLink" style="color:var(--accent)">fetch remaining ${mirrorWithText - cachedTexts}?</a></span>`;
   } else {
-    indexLine = `<span>Title search only · <b>${mirrorWithText}</b> texts on mirror · <a href="#" id="enableDeepLink" style="color:var(--accent)">enable deep search</a></span>`;
+    indexLine = `<span>Title search only · <b>${mirrorWithText}</b> reports with text · <a href="#" id="enableDeepLink" style="color:var(--accent)">enable deep search</a></span>`;
   }
   el.innerHTML = `Showing <b>${shown}</b> of <b>${total}</b> reports across <b>${Object.keys(state.data.reports).length}</b> committees. ${metaLine} ${indexLine}`;
 
-  // "fetch remaining N?" / "enable deep search" inline link.
+  // "enable deep search" inline link — flips the toggle, persists, kicks
+  // off the bundle fetch. The link copy already names the action; the
+  // estimate (~3 MB) lives in the settings section for users who want
+  // detail before flipping.
   const enableLink = document.getElementById('enableDeepLink');
   if (enableLink) {
     enableLink.addEventListener('click', (e) => {
@@ -337,8 +356,11 @@ function renderResultsLine() {
       const s = loadSettings();
       s.deepSearch = true;
       saveSettings(s);
-      preloadFullTextIndex();
       renderResultsLine();
+      loadSearchBundle().then(() => {
+        renderResultsLine();
+        if (state.filters.search) applyFilters();
+      });
     });
   }
 
@@ -707,43 +729,72 @@ async function chatSend(opts) {
   }
 }
 
-// ── Deep search / full-text indexing ────────────────────────────────────────
+// ── Search bundle (v0.6) ────────────────────────────────────────────────────
+//
+// Fetches docs/search-bundle.json once, caches in IDB, parses entries into a
+// Map<key, {title, head}>. Used by applyFilters when deep search is on so
+// the user gets substring matching across the first 5K chars of every
+// extracted report without paying the ~177 MB fan-out the SansadLocal-era
+// "deep search" used to do.
+//
+// Offline-first: IDB cache lights up the search instantly on return visits;
+// network fetch runs in parallel and replaces the in-memory bundle if the
+// mirror has a newer one (compared via generated_at). 5-min CF edge cache
+// means re-visits within a window pay zero origin cost.
 
-async function preloadFullTextIndex() {
-  if (!state.deepSearch) return;
-  if (state.fullTextIndex.fullyLoaded || state.fullTextIndex.loading) return;
-  state.fullTextIndex.loading = true;
+function _parseBundle(b) {
+  const map = new Map();
+  for (const e of (b.entries || [])) map.set(e.key, { title: e.title, head: e.head });
+  return {
+    generated_at: b.generated_at,
+    head_chars:   b.head_chars,
+    total:        b.total,
+    map,
+  };
+}
 
-  const allReports = getAllReports();
-  const withText = allReports.filter(hasExtractedText);
-  state.fullTextIndex.total = withText.length;
-  state.fullTextIndex.loaded = 0;
+async function loadSearchBundle() {
+  if (state.bundleLoading) return state.searchBundle;
+  state.bundleLoading = true;
+  renderResultsLine();   // shows "Loading search bundle…"
 
-  if (withText.length === 0) {
-    state.fullTextIndex.loading = false;
-    state.fullTextIndex.fullyLoaded = true;
-    renderResultsLine();
-    return;
-  }
-
-  const CONCURRENCY = 6;
-  let idx = 0;
-  async function worker() {
-    while (idx < withText.length) {
-      const r = withText[idx++];
-      try { await fetchReportText(r); } catch {}
-      state.fullTextIndex.loaded++;
-      if (state.fullTextIndex.loaded % 5 === 0 || state.fullTextIndex.loaded === withText.length) {
-        renderResultsLine();
-      }
+  // 1) IDB cache (instant). Lights up search before the network round-trip.
+  try {
+    const cached = await idbGet('blobs', 'search-bundle.json');
+    if (cached) {
+      state.searchBundle = _parseBundle(cached);
+      state.bundleLoaded = true;
+      renderResultsLine();
     }
-  }
-  await Promise.all(Array(CONCURRENCY).fill(0).map(worker));
+  } catch {}
 
-  state.fullTextIndex.loading = false;
-  state.fullTextIndex.fullyLoaded = true;
-  renderResultsLine();
-  if (state.filters.search) applyFilters();
+  // 2) Network — always fetch in case the mirror has a newer build.
+  try {
+    const dataUrl = _deps.config.dataBaseUrl;
+    const bucket  = Math.floor(Date.now() / 300000);
+    const res = await fetch(dataUrl + 'search-bundle.json?v=' + bucket, { cache: 'no-cache' });
+    if (res.ok) {
+      const fresh = await res.json();
+      const cachedAt = state.searchBundle?.generated_at;
+      if (!cachedAt || (fresh.generated_at && fresh.generated_at > cachedAt)) {
+        state.searchBundle = _parseBundle(fresh);
+        state.bundleLoaded = true;
+        idbPut('blobs', 'search-bundle.json', fresh).catch(() => {});
+      }
+    } else if (res.status === 404) {
+      // Mirror hasn't built a bundle yet (early-phase deploy). Fall back
+      // gracefully — user can still title-search; opening reports caches
+      // their text into state.cache.text for body matching.
+      console.info('search-bundle.json 404 — mirror has no bundle yet');
+    }
+  } catch (e) {
+    console.warn('search-bundle fetch failed', e);
+  } finally {
+    state.bundleLoading = false;
+    renderResultsLine();
+    if (state.filters.search) applyFilters();
+  }
+  return state.searchBundle;
 }
 
 // ── Export ──────────────────────────────────────────────────────────────────
@@ -930,18 +981,24 @@ function renderSettingsSection(container) {
   // because both are about the DRSC corpus's manifest + report files.
   // Shell calls this inside its settings modal alongside shell-level sections.
   const meta = state.data.meta;
+  const bundle = state.searchBundle;
   const manifestEntries = Object.values(state.data.manifest?.texts || {}).reduce((s, c) => s + Object.keys(c).length, 0);
-  const cachedEntries   = Object.keys(state.cache.text).length;
-  const remaining = Math.max(0, manifestEntries - cachedEntries);
-  const estMB = Math.round((remaining * 40) / 1024);   // ~40 KB gzipped per text
-  const estimateLine = (cachedEntries === manifestEntries)
-    ? `All ${manifestEntries} extracted texts already cached locally. Toggling on uses zero new bandwidth.`
-    : `${manifestEntries} extracted reports total · ${cachedEntries} already cached · enabling will download ~${estMB} MB (gzipped) on next page load.`;
+  const bundleStats = meta?.search_bundle;   // {total, head_chars, size_bytes, truncated} or null
+
+  let estimateLine;
+  if (state.bundleLoaded && bundle) {
+    estimateLine = `Search bundle loaded: ${bundle.total} reports, head ${bundle.head_chars} chars per report. Cached locally — no new bandwidth.`;
+  } else if (bundleStats?.size_bytes) {
+    const mb = (bundleStats.size_bytes / (1024 * 1024)).toFixed(1);
+    estimateLine = `Single ~${mb} MB download (CF gzip serves ~30%, cached locally after). Searches the first ${bundleStats.head_chars} chars of all ${bundleStats.total} extracted reports.`;
+  } else {
+    estimateLine = `Single ~3 MB download (cached locally after). Searches the first 5,000 chars of every extracted report.`;
+  }
 
   container.innerHTML = `
     <div class="settings-section">
       <h3>Search (Standing Committees)</h3>
-      <p>By default, search matches report titles plus any reports you've already opened. Enable deep search to pre-fetch every extracted PDF's text and search across all body content. Texts cache locally after first download.</p>
+      <p>By default, search matches report titles plus any reports you've already opened. Enable deep search to fetch a single bundle (title + head text per report) and search across all of them.</p>
       <div class="settings-row">
         <label for="deepSearch">Deep search</label>
         <div>
@@ -984,9 +1041,7 @@ function applySettingsFromUI() {
   const s = loadSettings();
   s.deepSearch = state.deepSearch;
   saveSettings(s);
-  if (state.deepSearch && !wasDeep) {
-    preloadFullTextIndex();
-  }
+  if (state.deepSearch && !wasDeep) loadSearchBundle();
 }
 
 // ── Activation / lifecycle ──────────────────────────────────────────────────
@@ -1012,7 +1067,9 @@ async function activate(deps) {
       renderList();
       renderResultsLine();
     }
-    preloadFullTextIndex();   // no-op unless state.deepSearch is true
+    // Light up the bundle if the user has deep search on. IDB cache hits
+    // first, network fetches a newer bundle in the background.
+    if (state.deepSearch) loadSearchBundle();
   });
 
   return true;
@@ -1045,19 +1102,27 @@ const api = {
   get(key) {
     return getAllReports().find(r => reportKey(r) === key) || null;
   },
-  // Substring search across titles + cached texts. opts.deep (bool) — if
-  // true, kicks off the full-text indexer first; otherwise matches whatever's
-  // already cached.
+  // Substring search across titles + bundle heads + cached texts.
+  // opts.deep (bool) — if true, ensures the search bundle is loaded so
+  // body-text matches across the corpus head_chars are included.
   async search(query, opts = {}) {
     const q = String(query || '').toLowerCase();
-    if (opts.deep && !state.fullTextIndex.fullyLoaded) {
+    if (opts.deep && !state.bundleLoaded) {
       state.deepSearch = true;
-      await preloadFullTextIndex();
+      await loadSearchBundle();
     }
+    const bundle = state.searchBundle;
     return getAllReports().filter(r => {
+      const key = reportKey(r);
       const hay = (r.title || '').toLowerCase();
-      const cachedText = state.cache.text[reportKey(r)];
-      return hay.includes(q) || (cachedText && cachedText.toLowerCase().includes(q));
+      if (hay.includes(q)) return true;
+      if (bundle) {
+        const e = bundle.map.get(key);
+        if (e && e.head.toLowerCase().includes(q)) return true;
+      }
+      const cachedText = state.cache.text[key];
+      if (cachedText && cachedText.toLowerCase().includes(q)) return true;
+      return false;
     });
   },
   // Programmatically open a report dialog. Returns true if found.
