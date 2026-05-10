@@ -72,8 +72,8 @@ Two modes, picked in **Settings**:
 | Layer        | Where it lives                                                                 |
 | ------------ | ------------------------------------------------------------------------------ |
 | Data scrape  | [`NakliTechie/parliamentwatch-data`](https://github.com/NakliTechie/parliamentwatch-data) — independent scrapers per corpus (DRSC every 4h, CAG daily + hourly backfill + weekly OCR, Bills daily + 4-hourly backfill). One scheduled GitHub Action per scraper; commits flow to the mirror repo. |
-| Data hosting | Cloudflare Workers + Static Assets serves `docs/` at `sansadsaar-data.naklitechie.com` with proper CORS. Each corpus's outputs live under `docs/<corpus>/`. Indices, search bundles, and body-token indices are sharded by sorted-key range for parallel app fetch. |
-| App          | This repo — corpus-module pattern. `app/shell.js` (registry, AI worker, chip switcher, settings, JS API) + `app/corpora/<id>/index.js` per corpus. Single `index.html`, no build step. Served from Cloudflare Pages. |
+| Data hosting | Static assets served at `sansadsaar-data.naklitechie.com` with CORS. Each corpus's outputs live under `docs/<corpus>/`. Indices, search bundles, and body-token indices are sharded by sorted-key range for parallel app fetch. |
+| App          | This repo — corpus-module pattern. `app/shell.js` (registry, AI worker, chip switcher, settings, JS API) + `app/corpora/<id>/index.js` per corpus. Single `index.html`, no build step. |
 | AI inference | Transformers.js v4 on WebGPU, or any OpenAI- / Anthropic-compatible API. |
 
 The two-repo split exists because the upstream sources (`sansad.in`, `cag.gov.in`) block cross-origin browser fetches. The mirror runs scraping server-side and re-publishes as static files; the browser app stays purely a presentation layer.
