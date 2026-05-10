@@ -1,6 +1,6 @@
 # SansadSaar
 
-> Browse, search, and summarise reports from India's 24 Parliamentary Standing Committees — privately, in your browser.
+> Browse, search, and summarise India's parliamentary record — privately, in your browser.
 
 **[Live →](https://sansadsaar.naklitechie.com)** · **[User guide →](https://sansadsaar.naklitechie.com/guide/)**
 
@@ -10,16 +10,33 @@ No accounts. No keys required. No data leaves your device.
 
 ## What it does
 
-- **Browse** every report from all 24 Departmentally Related Standing Committees (DRSCs) — 16 chaired by Lok Sabha, 8 by Rajya Sabha. **14,700+ reports** across LS14–18.
-- **Search** — title + full-text across every PDF the mirror has extracted. Categories auto-tagged (Demand for Grants, Action Taken, Bills, Assurances, Subjects).
-- **AI summary** — one click → plain-English 4-section briefing of any report. Cached locally.
-- **Ask** — chat with a report. Your question + the report text + your cached summary (when one exists) go to the AI of your choice. Per-report Q&A history persists across sessions.
-- **Web search enrichment** (optional) — let Tavily / Brave / SearXNG feed recent web context into Ask.
+Three corpora live, more in the pipeline. Each lands as a chip in the top chrome; switch between them, search within each, summarise individual documents with on-device or BYOK AI.
+
+| Macro group | Corpus | Live | Source |
+|---|---|---|---|
+| Oversight | **DRSC reports** — Departmentally Related Standing Committees, 24 of them, ~14,700 reports across LS14–18 | ✅ | sansad.in |
+| Oversight | **CAG audit reports** — Comptroller and Auditor General audits across Union, State, and Local Bodies | ✅ | cag.gov.in |
+| Legislation | **Bills** — every bill introduced in Indian Parliament, ~9,900 records 1952→2026 with full status timeline + per-stage PDFs (intro / LS-passed / RS-passed / both / errata / synopsis / committee report / gazette) | ✅ | sansad.in |
+| Legislation | Law Commission reports | planned (v1.2) | lawcommissionofindia.nic.in |
+| Floor | Speeches (Hansard) | planned (v1.1.b) | sansad.in |
+| Floor | Questions (starred + unstarred) | planned (v1.1.c) | sansad.in |
+| Oversight | Financial Committee reports (PAC / Estimates / Public Undertakings) | planned (v1.2) | sansad.in |
+| Executive | Gazette notifications | planned (v1.2) | archive.org `gazetteofindia` |
+
+For each live corpus:
+
+- **Browse** — sortable, filterable list of every record. Filters adapt per corpus (committee + Lok Sabha for DRSC; gov-type + audit-type + sector for CAG; status + bill-type + category + house + year for Bills).
+- **Search** — title scan is always-on. **Deep search** (per-corpus, opt-in) loads a sharded body-token index covering the full text of every record with extracted text, lets you find phrases anywhere in the corpus.
+- **AI summary** — one click → plain-English structured briefing. Cached locally per record.
+- **Ask** — chat with one record. Your question + the record text + your cached summary go to the AI of your choice. Per-record Q&A history persists across sessions.
+- **Web search enrichment** (optional) — Tavily / Brave / SearXNG feed recent web context into Ask.
 - **Export** — filtered metadata as CSV, generated summaries as Markdown.
 
 ## Why
 
-DRSCs are the institutional mechanism through which Indian Parliament actually scrutinises the executive. Their reports — on demands for grants, bills, and policy subjects — are evidence-based and non-partisan. They're also poorly indexed and rarely read. SansadSaar fixes the discovery layer; AI fixes the skim layer; both happen on your machine.
+Indian Parliament publishes immense documentary output — committee scrutiny of the executive, legislative bills, Comptroller-General audits, daily floor speeches, parliamentary questions, gazette notifications. All public. All poorly indexed. All rarely read. SansadSaar fixes the discovery layer (a single browsable, searchable, filter-able view across corpora); AI fixes the skim layer (plain-English summaries + chat); both happen on your machine.
+
+DRSC committees are the institutional mechanism through which Parliament scrutinises the executive. CAG audits are the financial-accountability layer. Bills are how law is made. Each is its own corpus; SansadSaar puts them on the same surface.
 
 ## Privacy model
 
@@ -54,12 +71,14 @@ Two modes, picked in **Settings**:
 
 | Layer        | Where it lives                                                                 |
 | ------------ | ------------------------------------------------------------------------------ |
-| Data scrape  | [`NakliTechie/parliamentwatch-data`](https://github.com/NakliTechie/parliamentwatch-data) — daily GH Action runs Pranay Kotasthane's [Python scraper](https://github.com/pranaykotas/parliamentwatch) and commits the output. |
-| Data hosting | GitHub Pages serves `reports.json` + `text/<committee>/LS<n>_<num>.txt` with proper CORS. |
-| App          | This repo — one `index.html`, no build step, served from GitHub Pages with Cloudflare in front for the custom domain. |
-| AI inference | Transformers.js v4 on WebGPU, or any OpenAI-/Anthropic-compatible API. |
+| Data scrape  | [`NakliTechie/parliamentwatch-data`](https://github.com/NakliTechie/parliamentwatch-data) — independent scrapers per corpus (DRSC every 4h, CAG daily + hourly backfill + weekly OCR, Bills daily + 4-hourly backfill). One scheduled GitHub Action per scraper; commits flow to the mirror repo. |
+| Data hosting | Cloudflare Workers + Static Assets serves `docs/` at `sansadsaar-data.naklitechie.com` with proper CORS. Each corpus's outputs live under `docs/<corpus>/`. Indices, search bundles, and body-token indices are sharded by sorted-key range for parallel app fetch. |
+| App          | This repo — corpus-module pattern. `app/shell.js` (registry, AI worker, chip switcher, settings, JS API) + `app/corpora/<id>/index.js` per corpus. Single `index.html`, no build step. Served from Cloudflare Pages. |
+| AI inference | Transformers.js v4 on WebGPU, or any OpenAI- / Anthropic-compatible API. |
 
-The two-repo split exists because `sansad.in` blocks cross-origin browser fetches. The mirror does the scraping server-side and re-publishes as static files; the browser app stays purely a presentation layer.
+The two-repo split exists because the upstream sources (`sansad.in`, `cag.gov.in`) block cross-origin browser fetches. The mirror runs scraping server-side and re-publishes as static files; the browser app stays purely a presentation layer.
+
+**Independence Principle.** Each corpus's scraper is its own subfolder + own GH Actions workflow + own concurrency group, no shared Python state. Each corpus's app module is its own file in `app/corpora/<id>/`, no imports across corpora. A broken scraper means one corpus's chip shows "stale" — never an app-wide outage.
 
 ## Credit
 
