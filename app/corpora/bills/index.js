@@ -104,13 +104,18 @@ const state = {
   dialogChat: [],
   streamingContext: null,
 
-  // Deep search bundle (single corpus — what Chirag deferred at v1.0a was
-  // *cross-corpus* search; per-corpus deep search is in scope). Title scan
-  // is always-on; deep search adds title + first ~5K chars of every
-  // extracted bill.
+  // Deep search (single corpus — what Chirag deferred at v1.0a was
+  // *cross-corpus* search; per-corpus deep search is in scope). Title +
+  // ministry + introducer scan is always-on; deep search adds:
+  //   - search-bundle-NN.json  → first 5K chars of every extracted bill
+  //   - search-index-NN.json   → full-body inverted token index
+  // Both sharded same way as DRSC + CAG (v1.0c pattern).
   searchBundle: null,
   bundleLoading: false,
   bundleLoaded:  false,
+  searchIndex:  null,
+  indexLoading: false,
+  indexLoaded:  false,
   deepSearch: false,
 };
 
@@ -302,6 +307,13 @@ function applyFilters() {
   const parsedQ = rawQ ? parseQuery(rawQ) : null;
   const bundle = state.searchBundle;
 
+  // Pre-compute the set of doc keys each token reaches in the body index
+  // (full-corpus token presence). Phrases can't use the index (token-level
+  // only) — they fall back to title + bundle.head + cached-text scan.
+  const tokenIndexSets = parsedQ
+    ? parsedQ.tokens.map(t => _expandTokenToDocs(t))
+    : [];
+
   const filtered = all.filter(b => {
     if (f.status && b.status !== f.status) return false;
     if (f.billType && b.billType !== f.billType) return false;
@@ -319,7 +331,11 @@ function applyFilters() {
     const bundleEntry = bundle ? bundle.map.get(key) : null;
     const headLower   = bundleEntry ? bundleEntry.head.toLowerCase() : '';
 
-    function tokenHits(t) {
+    function tokenHits(t, indexSet) {
+      // Body-index hit (any occurrence in the full body for any vocab token
+      // matching this prefix) — primary signal when deep search is loaded.
+      if (indexSet && indexSet.has(key)) return true;
+      // Fall-throughs: visible-field substring match (cheap, always-on).
       return titleLower.includes(t)
           || ministryLower.includes(t)
           || introducerLower.includes(t)
@@ -333,7 +349,8 @@ function applyFilters() {
           || (cachedLower && cachedLower.includes(p))
           || (headLower && headLower.includes(p));
     }
-    return parsedQ.tokens.every(tokenHits) && parsedQ.phrases.every(phraseHits);
+    return parsedQ.tokens.every((t, i) => tokenHits(t, tokenIndexSets[i]))
+        && parsedQ.phrases.every(phraseHits);
   });
 
   filtered.sort((a, b) => {
@@ -368,10 +385,18 @@ function renderResultsLine() {
   const bundle   = state.searchBundle;
 
   let indexLine = '';
-  if (state.bundleLoading) {
-    indexLine = `<span class="indexing">Loading search bundle…</span>`;
+  const idx = state.searchIndex;
+  const loading = state.bundleLoading || state.indexLoading;
+  if (loading) {
+    const what = state.bundleLoading && state.indexLoading
+      ? 'bundle + index'
+      : state.bundleLoading ? 'bundle' : 'index';
+    indexLine = `<span class="indexing">Loading search ${what}…</span>`;
   } else if (state.deepSearch && state.bundleLoaded && bundle) {
-    indexLine = `<span title="Search hits titles + first ${bundle.head_chars} chars of every bill with extracted text.">Full-text search · ${bundle.total} bills</span>`;
+    const tooltip = idx
+      ? `Search hits titles + first ${bundle.head_chars} chars of every bill, plus body-token presence across the corpus.`
+      : `Search hits titles + first ${bundle.head_chars} chars of every bill.`;
+    indexLine = `<span title="${escapeHtml(tooltip)}">Full-text search · ${bundle.total} bills</span>`;
   } else if (withText) {
     indexLine = `<span>Title search · <b>${withText}</b> bills with text · <a href="#" id="enableDeepLink" style="color:var(--accent)">enable deep search</a></span>`;
   }
@@ -386,7 +411,7 @@ function renderResultsLine() {
       s.bills_deepSearch = true;
       saveSettings(s);
       renderResultsLine();
-      loadSearchBundle().then(() => {
+      Promise.all([loadSearchBundle(), loadSearchIndex()]).then(() => {
         renderResultsLine();
         if (state.filters.search) applyFilters();
       });
@@ -845,9 +870,11 @@ async function loadCachedChats() {
   } catch {}
 }
 
-// ── Search bundle loader (deep-search, single-corpus) ─────────────────────
+// ── Search bundle (sharded, mirrors DRSC/CAG v1.0c) ────────────────────────
 
 function _parseBundle(b) {
+  // Accept both shapes: (a) merged blob {entries: [...]} or (b) merged from
+  // shards via `entries` array concatenation upstream.
   const map = new Map();
   for (const e of (b.entries || [])) map.set(e.key, { title: e.title, head: e.head });
   return {
@@ -863,7 +890,8 @@ async function loadSearchBundle() {
   state.bundleLoading = true;
   renderResultsLine();
 
-  // IDB cache restore (instant, possibly stale).
+  // IDB cache restore (instant, possibly stale). Cache key now stores the
+  // already-merged bundle for fast restore.
   try {
     const cached = await idbGet('blobs', 'bills-search-bundle.json');
     if (cached) {
@@ -873,18 +901,38 @@ async function loadSearchBundle() {
     }
   } catch {}
 
-  // Network fetch (always — gets us the latest after a backfill commit).
+  // Network fetch — fetch all shards in parallel, merge entries, then cache
+  // the merged blob in IDB for the next load. Shards listed in
+  // meta.search_bundle.shards. If meta is unavailable (rare race during
+  // first-ever load), bail; the next reload will pick it up.
   try {
+    const meta = state.data.meta;
+    const shardList = meta?.search_bundle?.shards;
+    if (!shardList || !shardList.length) {
+      console.info('Bills: search_bundle.shards missing from meta; skipping fetch');
+      return state.searchBundle;
+    }
     const dataUrl = _deps.config.dataBaseUrl;
     const bucket  = Math.floor(Date.now() / 300000);
-    const res = await fetch(dataUrl + CORPUS_PREFIX + 'search-bundle.json?v=' + bucket, { cache: 'no-cache' });
-    if (!res.ok) throw new Error('search-bundle: ' + res.status);
-    const fresh = await res.json();
+    const shards = await Promise.all(shardList.map(name =>
+      fetch(dataUrl + CORPUS_PREFIX + name + '?v=' + bucket, { cache: 'no-cache' })
+        .then(r => r.ok ? r.json() : Promise.reject(`${name}: ${r.status}`))
+    ));
+
+    let head_chars   = 5000;
+    let generated_at = '';
+    const entries    = [];
+    for (const s of shards) {
+      head_chars = s.head_chars || head_chars;
+      if (s.generated_at && s.generated_at > generated_at) generated_at = s.generated_at;
+      if (s.entries) entries.push(...s.entries);
+    }
+    const merged = { generated_at, head_chars, total: entries.length, entries };
     const cachedAt = state.searchBundle?.generated_at;
-    if (!cachedAt || (fresh.generated_at && fresh.generated_at > cachedAt)) {
-      state.searchBundle = _parseBundle(fresh);
+    if (!cachedAt || (generated_at && generated_at > cachedAt)) {
+      state.searchBundle = _parseBundle(merged);
       state.bundleLoaded = true;
-      idbPut('blobs', 'bills-search-bundle.json', fresh).catch(() => {});
+      idbPut('blobs', 'bills-search-bundle.json', merged).catch(() => {});
     }
   } catch (e) {
     console.warn('Bills: search-bundle fetch failed', e);
@@ -894,6 +942,128 @@ async function loadSearchBundle() {
     if (state.filters.search) applyFilters();
   }
   return state.searchBundle;
+}
+
+// ── Search index (sharded inverted token index, mirrors CAG v1.0c) ─────────
+
+function _parseIndex(raw) {
+  const shards = raw.shards || [];
+  if (!shards.length) return null;
+  const vocab = shards[0].vocab || [];
+  let report_count = 0;
+  let generated_at = '';
+  for (const s of shards) {
+    report_count += (s.report_keys || []).length;
+    if (s.generated_at && s.generated_at > generated_at) generated_at = s.generated_at;
+  }
+  return {
+    generated_at,
+    report_count,
+    vocab_size: vocab.length,
+    vocab,
+    shards,
+  };
+}
+
+async function loadSearchIndex() {
+  if (state.indexLoading) return state.searchIndex;
+  state.indexLoading = true;
+  renderResultsLine();
+
+  try {
+    const cached = await idbGet('blobs', 'bills-search-index.json');
+    if (cached && cached.shards) {
+      state.searchIndex = _parseIndex(cached);
+      state.indexLoaded = true;
+      renderResultsLine();
+    }
+  } catch {}
+
+  try {
+    const meta = state.data.meta;
+    const shardList = meta?.search_index?.shards;
+    if (!shardList || !shardList.length) {
+      console.info('Bills: search_index.shards missing from meta; skipping fetch');
+      return state.searchIndex;
+    }
+    const dataUrl = _deps.config.dataBaseUrl;
+    const bucket  = Math.floor(Date.now() / 300000);
+    const shards = await Promise.all(shardList.map(name =>
+      fetch(dataUrl + CORPUS_PREFIX + name + '?v=' + bucket, { cache: 'no-cache' })
+        .then(r => r.ok ? r.json() : Promise.reject(`${name}: ${r.status}`))
+    ));
+    let generated_at = '';
+    for (const s of shards) {
+      if (s.generated_at && s.generated_at > generated_at) generated_at = s.generated_at;
+    }
+    const cachedAt = state.searchIndex?.generated_at;
+    if (!cachedAt || (generated_at && generated_at > cachedAt)) {
+      const blob = { shards };
+      state.searchIndex = _parseIndex(blob);
+      state.indexLoaded = true;
+      idbPut('blobs', 'bills-search-index.json', blob).catch(() => {});
+      _decodedPostingsCache.clear();
+    }
+  } catch (e) {
+    console.warn('Bills: search-index fetch failed', e);
+  } finally {
+    state.indexLoading = false;
+    renderResultsLine();
+    if (state.filters.search) applyFilters();
+  }
+  return state.searchIndex;
+}
+
+// Per-session decoded posting cache. Key is `${shardIdx}:${vocabIdx}`.
+const _decodedPostingsCache = new Map();
+function _decodePostings(shardIdx, vi) {
+  const cacheKey = shardIdx + ':' + vi;
+  if (_decodedPostingsCache.has(cacheKey)) return _decodedPostingsCache.get(cacheKey);
+  const idx = state.searchIndex;
+  if (!idx || !idx.shards[shardIdx]) return [];
+  const delta = idx.shards[shardIdx].postings[vi];
+  if (!delta || !delta.length) return [];
+  const out = new Array(delta.length);
+  let acc = delta[0] | 0;
+  out[0] = acc;
+  for (let i = 1; i < delta.length; i++) {
+    acc += delta[i] | 0;
+    out[i] = acc;
+  }
+  _decodedPostingsCache.set(cacheKey, out);
+  return out;
+}
+
+function _expandPrefix(prefix) {
+  const idx = state.searchIndex;
+  if (!idx || !idx.vocab.length || !prefix) return [];
+  const vocab = idx.vocab;
+  let lo = 0, hi = vocab.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (vocab[mid] < prefix) lo = mid + 1; else hi = mid;
+  }
+  const out = [];
+  for (let i = lo; i < vocab.length && vocab[i].startsWith(prefix); i++) out.push(i);
+  return out;
+}
+
+function _expandTokenToDocs(tokenStr) {
+  const idx = state.searchIndex;
+  if (!idx || !idx.shards || !idx.shards.length) return null;
+  const vis = _expandPrefix(tokenStr);
+  if (!vis.length) return new Set();
+  const out = new Set();
+  for (let si = 0; si < idx.shards.length; si++) {
+    const shard = idx.shards[si];
+    const shardKeys = shard.report_keys || [];
+    for (const vi of vis) {
+      for (const localIdx of _decodePostings(si, vi)) {
+        out.add(shardKeys[localIdx]);
+      }
+    }
+  }
+  return out;
 }
 
 // ── Filter row + handlers ──────────────────────────────────────────────────
@@ -985,7 +1155,10 @@ async function activate(deps) {
         renderList();
         renderResultsLine();
       }
-      if (state.deepSearch) loadSearchBundle();
+      if (state.deepSearch) {
+        loadSearchBundle();
+        loadSearchIndex();
+      }
     });
   } else {
     populateFilters();
@@ -1013,15 +1186,18 @@ function renderSettingsSection(container) {
   const withText = Object.keys(state.data.manifest?.texts || {}).length;
   const bundle = state.searchBundle;
 
-  let bundleLine;
-  if (state.bundleLoaded && bundle) {
-    bundleLine = `Search bundle loaded: ${bundle.total} bills, ${bundle.head_chars} chars per entry.`;
-  } else if (state.bundleLoading) {
-    bundleLine = `Loading search bundle…`;
+  let estimateLine;
+  const bundleStats = meta?.search_bundle;
+  const indexStats  = meta?.search_index;
+  if (state.bundleLoaded && state.indexLoaded && bundle && state.searchIndex) {
+    estimateLine = `Search bundle + body index loaded: ${bundle.total} bills, ${state.searchIndex.vocab_size.toLocaleString()} tokens indexed.`;
+  } else if (state.bundleLoaded && bundle) {
+    estimateLine = `Bundle loaded (${bundle.total} bills). Body index will load next.`;
+  } else if (bundleStats?.size_bytes && indexStats?.size_bytes) {
+    const totalMB = ((bundleStats.size_bytes + indexStats.size_bytes) / (1024 * 1024)).toFixed(1);
+    estimateLine = `~${totalMB} MB total across all Bills shards (CF gzip serves ~30%, cached locally after).`;
   } else {
-    // Bundle is one file ~5KB × N bills; estimate without fetching.
-    const estMB = (withText * 5000 / (1024 * 1024)).toFixed(1);
-    bundleLine = `One-time download (~${estMB} MB), cached locally after first load.`;
+    estimateLine = `Sharded download (multiple files), cached locally after first load.`;
   }
 
   container.innerHTML = `
@@ -1034,7 +1210,7 @@ function renderSettingsSection(container) {
           <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.86rem; color:var(--text)">
             <input type="checkbox" id="billsDeepSearch" ${state.deepSearch ? 'checked' : ''} style="width:auto"> Enable full-text search across bills
           </label>
-          <p style="margin-top:6px; font-size:0.78rem; color:var(--muted)">${bundleLine}</p>
+          <p style="margin-top:6px; font-size:0.78rem; color:var(--muted)">${estimateLine}</p>
         </div>
       </div>
     </div>
@@ -1058,8 +1234,9 @@ function applySettingsFromUI() {
   const s = loadSettings();
   s.bills_deepSearch = wantsDeep;
   saveSettings(s);
-  if (wantsDeep && !state.bundleLoaded && !state.bundleLoading) {
-    loadSearchBundle();
+  if (wantsDeep) {
+    if (!state.bundleLoaded && !state.bundleLoading) loadSearchBundle();
+    if (!state.indexLoaded  && !state.indexLoading)  loadSearchIndex();
   }
   renderResultsLine();
 }
