@@ -16,6 +16,7 @@ import {
   INTRO_SEEN_KEY,
 } from './deps.js';
 import { DRSCCorpus } from './corpora/drsc/index.js';
+import { CAGCorpus }  from './corpora/cag/index.js';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -827,25 +828,22 @@ async function refreshCorpusStatus() {
   el.innerHTML = `<span class="dot"></span><span>${escapeHtml(c.shortLabel)}: updated ${escapeHtml(rel)}</span>`;
 }
 
-// Tracks which corpora have run their `.activate(deps)` once. Subsequent
-// chip clicks on an already-activated corpus just update UI focus without
-// re-running data fetch / re-attaching handlers.
-const _activated = new Set();
-
+// Each corpus is responsible for making its own `activate()` idempotent —
+// shell calls it on every chip click. Corpora typically gate heavy one-time
+// work (data fetch, IDB hydration) behind a private `_activated` flag and
+// always re-render their filter row / list, so a multi-corpus switch
+// round-trip restores the right UI in `#filtersContainer` and `#reportsList`.
 async function activate(corpusId) {
   const c = corpora.get(corpusId);
   if (!c) return;
-  if (activeCorpusId === corpusId && _activated.has(corpusId)) return;
+  const isSameAsActive = activeCorpusId === corpusId;
   activeCorpusId = corpusId;
   renderCorpusChips();
-  if (!_activated.has(corpusId)) {
-    _activated.add(corpusId);
-    if (typeof c.activate === 'function') {
-      const ok = await c.activate(deps);
-      if (ok === false) return;
-    }
-    await refreshCorpusStatus();
+  if (typeof c.activate === 'function') {
+    const ok = await c.activate(deps);
+    if (ok === false) return;
   }
+  if (!isSameAsActive) await refreshCorpusStatus();
   broadcast('corpus-activated', { corpus: corpusId });
 }
 
@@ -983,6 +981,7 @@ async function init() {
   // them and JS API can be built once. activeCorpusId stays null until
   // activate() sets it — that's what gates _activated bookkeeping.
   corpora.set(DRSCCorpus.id, DRSCCorpus);
+  corpora.set(CAGCorpus.id,  CAGCorpus);
 
   attachShellHandlers();
   buildJSAPI();

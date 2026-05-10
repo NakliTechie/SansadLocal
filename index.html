@@ -778,27 +778,8 @@ mark {
     <div class="corpus-chips" role="tablist" id="corpusChips" aria-label="Corpora"></div>
     <div class="corpus-status" id="corpusStatus" aria-live="polite"></div>
   </div>
-  <div class="filters">
-    <input type="search" id="filterSearch" placeholder="Search title or full text..." autocomplete="off">
-    <select id="filterCommittee"><option value="">All committees</option></select>
-    <select id="filterLS"><option value="">All Lok Sabhas</option></select>
-    <select id="filterCategory">
-      <option value="">All categories</option>
-      <option value="DFG">Demand for Grants</option>
-      <option value="AT">Action Taken</option>
-      <option value="BILL">Bills</option>
-      <option value="ASSURE">Assurances</option>
-      <option value="SUBJ">Subjects</option>
-    </select>
-    <select id="filterSort">
-      <option value="date_desc">Newest first</option>
-      <option value="date_asc">Oldest first</option>
-      <option value="number_desc">Report no. (high→low)</option>
-      <option value="number_asc">Report no. (low→high)</option>
-      <option value="committee">Committee A→Z</option>
-    </select>
-    <button class="ghost sm" id="resetFiltersBtn" title="Reset filters">&times;</button>
-  </div>
+  <!-- Filter row is corpus-owned (each corpus injects its own dropdowns on activate) -->
+  <div class="filters" id="filtersContainer"></div>
   <div class="results-line" id="resultsLine"></div>
   <div class="toolbar" id="toolbar">
     <button class="sm" id="exportMetaBtn" title="Export filtered metadata as CSV">&#11015; Metadata (CSV)</button>

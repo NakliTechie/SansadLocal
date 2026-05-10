@@ -515,6 +515,11 @@ function populateFilters() {
     lsSel.innerHTML = '<option value="">All Lok Sabhas</option>' +
       lsSorted.map(ls => `<option value="${ls}">LS ${ls}</option>`).join('');
   }
+
+  // Re-apply persisted state values so corpus-switch round-trips show the
+  // active selection in the dropdown UI (not just in state.filters).
+  if (cSel)  cSel.value  = state.filters.committee || '';
+  if (lsSel) lsSel.value = state.filters.ls        || '';
 }
 
 // ── Report dialog ───────────────────────────────────────────────────────────
@@ -1216,6 +1221,43 @@ async function loadCachedTexts() {
 
 // ── Handlers ────────────────────────────────────────────────────────────────
 
+// Injects the DRSC filter row HTML into the shared #filtersContainer. Each
+// corpus owns its own filter UI; `renderFilterRow` is idempotent and gets
+// called every time the corpus is shown so the row stays consistent even
+// when the user has switched away to another corpus and back.
+function renderFilterRow() {
+  const container = document.getElementById('filtersContainer');
+  if (!container) return;
+  container.innerHTML = `
+    <input type="search" id="filterSearch" placeholder="Search title or full text..." autocomplete="off">
+    <select id="filterCommittee"><option value="">All committees</option></select>
+    <select id="filterLS"><option value="">All Lok Sabhas</option></select>
+    <select id="filterCategory">
+      <option value="">All categories</option>
+      <option value="DFG">Demand for Grants</option>
+      <option value="AT">Action Taken</option>
+      <option value="BILL">Bills</option>
+      <option value="ASSURE">Assurances</option>
+      <option value="SUBJ">Subjects</option>
+    </select>
+    <select id="filterSort">
+      <option value="date_desc">Newest first</option>
+      <option value="date_asc">Oldest first</option>
+      <option value="number_desc">Report no. (high→low)</option>
+      <option value="number_asc">Report no. (low→high)</option>
+      <option value="committee">Committee A→Z</option>
+    </select>
+    <button class="ghost sm" id="resetFiltersBtn" title="Reset filters">&times;</button>
+  `;
+  // Re-apply persisted/current filter values so a corpus-switch round-trip
+  // doesn't lose what the user had typed.
+  document.getElementById('filterSearch').value    = state.filters.search    || '';
+  document.getElementById('filterCommittee').value = state.filters.committee || '';
+  document.getElementById('filterLS').value        = state.filters.ls        || '';
+  document.getElementById('filterCategory').value  = state.filters.category  || '';
+  document.getElementById('filterSort').value      = state.filters.sort      || 'date_desc';
+}
+
 function attachHandlers() {
   const debouncedSearch = debounce(() => { state.filters.search = document.getElementById('filterSearch').value; applyFilters(); }, 200);
   document.getElementById('filterSearch').addEventListener('input', debouncedSearch);
@@ -1240,8 +1282,14 @@ function attachHandlers() {
   });
 
   // Report dialog frame.
-  document.getElementById('reportCloseBtn').addEventListener('click', () => _deps.ui.closeModal('reportModal'));
+  const closeBtn = document.getElementById('reportCloseBtn');
+  if (closeBtn && !closeBtn.dataset._wired) {
+    closeBtn.dataset._wired = '1';
+    closeBtn.addEventListener('click', () => _deps.ui.closeModal('reportModal'));
+  }
   document.querySelectorAll('#reportModal .tab-btn').forEach(b => {
+    if (b.dataset._drscWired) return;   // already attached
+    b.dataset._drscWired = '1';
     b.addEventListener('click', () => switchReportTab(b.dataset.tab));
   });
 
@@ -1346,36 +1394,55 @@ function applySettingsFromUI() {
 
 // ── Activation / lifecycle ──────────────────────────────────────────────────
 
+// Tracks whether the heavy one-time setup (data fetch, IDB hydration) has
+// already run for this session. Subsequent activate() calls skip it but
+// still re-render the filter row + list — necessary when user switches
+// back to DRSC from another corpus that overwrote `#filtersContainer`.
+let _activated = false;
+
 async function activate(deps) {
   _deps = deps;
-  // Load DRSC-specific settings slice.
-  const settings = loadSettings();
-  state.deepSearch = !!settings.deepSearch;
-  state.matchAny   = !!settings.matchAny;
 
+  // ALWAYS — re-render filter row + handlers + applied filters so a
+  // corpus-switch round-trip restores DRSC's UI even if CAG (or another
+  // corpus) replaced the DOM in `#filtersContainer`.
+  renderFilterRow();
   attachHandlers();
 
-  const ok = await fetchData();
-  if (!ok) return false;
-  populateFilters();
-  renderHeaderStats();
-  applyFilters();
+  if (!_activated) {
+    _activated = true;
+    // Load DRSC-specific settings slice.
+    const settings = loadSettings();
+    state.deepSearch = !!settings.deepSearch;
+    state.matchAny   = !!settings.matchAny;
 
-  loadCachedSummaries();
-  loadCachedChats();
-  loadCachedTexts().then((n) => {
-    if (n) {
-      renderList();
-      renderResultsLine();
-    }
-    // Light up the bundle + index if the user has deep search on. IDB
-    // cache hits first per file, network fetches newer copies in the
-    // background. They run in parallel.
-    if (state.deepSearch) {
-      loadSearchBundle();
-      loadSearchIndex();
-    }
-  });
+    const ok = await fetchData();
+    if (!ok) return false;
+    populateFilters();
+    renderHeaderStats();
+    applyFilters();
+
+    loadCachedSummaries();
+    loadCachedChats();
+    loadCachedTexts().then((n) => {
+      if (n) {
+        renderList();
+        renderResultsLine();
+      }
+      // Light up the bundle + index if the user has deep search on. IDB
+      // cache hits first per file, network fetches newer copies in the
+      // background. They run in parallel.
+      if (state.deepSearch) {
+        loadSearchBundle();
+        loadSearchIndex();
+      }
+    });
+  } else {
+    // Re-mount: data already fetched, just refresh the visible UI.
+    populateFilters();
+    renderHeaderStats();
+    applyFilters();
+  }
 
   return true;
 }
