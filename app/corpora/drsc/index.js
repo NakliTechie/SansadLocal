@@ -809,6 +809,10 @@ async function chatSend(opts) {
 // mirror has a newer one (compared via generated_at). 5-min CF edge cache
 // means re-visits within a window pay zero origin cost.
 
+// _parseBundle takes a "merged" cache shape (entries flattened across all
+// shards) and builds the in-memory Map<key, {title, head}>. The cache shape
+// is flat so future shard re-shuffles on the mirror side don't invalidate
+// existing IDB caches by key changes.
 function _parseBundle(b) {
   const map = new Map();
   for (const e of (b.entries || [])) map.set(e.key, { title: e.title, head: e.head });
@@ -820,12 +824,18 @@ function _parseBundle(b) {
   };
 }
 
+// v1.0c: bundle is sharded into N files (search-bundle-00.json, …) so no
+// single asset exceeds CF Workers' 25 MiB cap. Shard list comes from
+// meta.json's `search_bundle.shards`. App fetches all in parallel and
+// concatenates the entries arrays.
 async function loadSearchBundle() {
   if (state.bundleLoading) return state.searchBundle;
   state.bundleLoading = true;
-  renderResultsLine();   // shows "Loading search bundle…"
+  renderResultsLine();
 
-  // 1) IDB cache (instant). Lights up search before the network round-trip.
+  // 1) IDB cache (instant) — lights up search before the network round-trip.
+  // We cache the merged-flat shape so the on-disk format is independent of
+  // the current shard count.
   try {
     const cached = await idbGet('blobs', 'search-bundle.json');
     if (cached) {
@@ -835,21 +845,44 @@ async function loadSearchBundle() {
     }
   } catch {}
 
-  // 2) Network — always fetch in case the mirror has a newer build.
+  // 2) Network — fetch all shards in parallel.
   try {
+    const meta = state.data.meta;
+    const shardList = meta?.search_bundle?.shards;
+    if (!shardList || !shardList.length) {
+      // meta.json predates sharding (mirror still on old build code) — leave
+      // whatever IDB-cached version we have and bail. Next mirror cron tick
+      // regenerates meta with the shards list.
+      console.info('search_bundle.shards missing from meta; skipping network fetch');
+      return state.searchBundle;
+    }
     const dataUrl = _deps.config.dataBaseUrl;
     const bucket  = Math.floor(Date.now() / 300000);
-    const res = await fetch(dataUrl + CORPUS_PREFIX + 'search-bundle.json?v=' + bucket, { cache: 'no-cache' });
-    if (res.ok) {
-      const fresh = await res.json();
-      const cachedAt = state.searchBundle?.generated_at;
-      if (!cachedAt || (fresh.generated_at && fresh.generated_at > cachedAt)) {
-        state.searchBundle = _parseBundle(fresh);
-        state.bundleLoaded = true;
-        idbPut('blobs', 'search-bundle.json', fresh).catch(() => {});
-      }
-    } else if (res.status === 404) {
-      console.info('search-bundle.json 404 — mirror has no bundle yet');
+    const shardResponses = await Promise.all(shardList.map(name =>
+      fetch(dataUrl + CORPUS_PREFIX + name + '?v=' + bucket, { cache: 'no-cache' })
+        .then(r => r.ok ? r.json() : Promise.reject(`${name}: ${r.status}`))
+    ));
+
+    // Merge into the cache shape: flat list of all entries across shards.
+    let head_chars   = 5000;
+    let generated_at = '';
+    const entries    = [];
+    for (const s of shardResponses) {
+      head_chars = s.head_chars || head_chars;
+      if (s.generated_at && s.generated_at > generated_at) generated_at = s.generated_at;
+      if (s.entries) entries.push(...s.entries);
+    }
+    const merged = {
+      generated_at,
+      head_chars,
+      total: entries.length,
+      entries,
+    };
+    const cachedAt = state.searchBundle?.generated_at;
+    if (!cachedAt || (generated_at && generated_at > cachedAt)) {
+      state.searchBundle = _parseBundle(merged);
+      state.bundleLoaded = true;
+      idbPut('blobs', 'search-bundle.json', merged).catch(() => {});
     }
   } catch (e) {
     console.warn('search-bundle fetch failed', e);
@@ -868,24 +901,28 @@ async function loadSearchBundle() {
 // substring). Index uses delta-encoded sorted postings so the wire format
 // gzips ~60% smaller. App reverses the deltas on first use per token.
 
+// v1.0c: index is sharded. Each shard carries the FULL vocabulary
+// (identical across shards) and a slice of report_keys + postings.
+// Postings are doc-local within their shard; the app keeps shards
+// separate at query time and unions doc keys across shards. We don't
+// need a global doc-id space.
 function _parseIndex(raw) {
-  // Build a Map for fast O(1) reportKey → doc-index lookup. The vocab is
-  // already alphabetically sorted by the mirror — preserve that order so
-  // binary search on prefixes works.
-  const reportKeyToIdx = new Map();
-  for (let i = 0; i < (raw.report_keys || []).length; i++) {
-    reportKeyToIdx.set(raw.report_keys[i], i);
+  // raw = { shards: [{vocab, report_keys, postings, ...}, ...] }
+  const shards = raw.shards || [];
+  if (!shards.length) return null;
+  const vocab = shards[0].vocab || [];   // identical across shards
+  let report_count = 0;
+  let generated_at = '';
+  for (const s of shards) {
+    report_count += (s.report_keys || []).length;
+    if (s.generated_at && s.generated_at > generated_at) generated_at = s.generated_at;
   }
   return {
-    version:        raw.version,
-    encoding:       raw.encoding,
-    generated_at:   raw.generated_at,
-    report_count:   raw.report_count,
-    vocab_size:     raw.vocab_size,
-    report_keys:    raw.report_keys || [],
-    vocab:          raw.vocab || [],
-    postings:       raw.postings || [],   // still delta-encoded; decoded lazily per token
-    reportKeyToIdx,
+    generated_at,
+    report_count,
+    vocab_size:    vocab.length,
+    vocab,
+    shards,
   };
 }
 
@@ -896,7 +933,7 @@ async function loadSearchIndex() {
 
   try {
     const cached = await idbGet('blobs', 'search-index.json');
-    if (cached) {
+    if (cached && cached.shards) {
       state.searchIndex = _parseIndex(cached);
       state.indexLoaded = true;
       renderResultsLine();
@@ -904,19 +941,31 @@ async function loadSearchIndex() {
   } catch {}
 
   try {
+    const meta = state.data.meta;
+    const shardList = meta?.search_index?.shards;
+    if (!shardList || !shardList.length) {
+      console.info('search_index.shards missing from meta; skipping network fetch');
+      return state.searchIndex;
+    }
     const dataUrl = _deps.config.dataBaseUrl;
     const bucket  = Math.floor(Date.now() / 300000);
-    const res = await fetch(dataUrl + CORPUS_PREFIX + 'search-index.json?v=' + bucket, { cache: 'no-cache' });
-    if (res.ok) {
-      const fresh = await res.json();
-      const cachedAt = state.searchIndex?.generated_at;
-      if (!cachedAt || (fresh.generated_at && fresh.generated_at > cachedAt)) {
-        state.searchIndex = _parseIndex(fresh);
-        state.indexLoaded = true;
-        idbPut('blobs', 'search-index.json', fresh).catch(() => {});
-      }
-    } else if (res.status === 404) {
-      console.info('search-index.json 404 — mirror has no index yet');
+    const shards = await Promise.all(shardList.map(name =>
+      fetch(dataUrl + CORPUS_PREFIX + name + '?v=' + bucket, { cache: 'no-cache' })
+        .then(r => r.ok ? r.json() : Promise.reject(`${name}: ${r.status}`))
+    ));
+    // Find newest generated_at across shards (they should all match — built
+    // in one pass — but be defensive against partial-rebuild edge cases).
+    let generated_at = '';
+    for (const s of shards) {
+      if (s.generated_at && s.generated_at > generated_at) generated_at = s.generated_at;
+    }
+    const cachedAt = state.searchIndex?.generated_at;
+    if (!cachedAt || (generated_at && generated_at > cachedAt)) {
+      const blob = { shards };
+      state.searchIndex = _parseIndex(blob);
+      state.indexLoaded = true;
+      idbPut('blobs', 'search-index.json', blob).catch(() => {});
+      _decodedPostingsCache.clear();   // shard layout may have shifted
     }
   } catch (e) {
     console.warn('search-index fetch failed', e);
@@ -928,14 +977,17 @@ async function loadSearchIndex() {
   return state.searchIndex;
 }
 
-// Decoded posting lists are cached per session keyed by vocab index.
-// Saves ~9M cumsums per query rebuild.
+// Decoded posting lists are cached per (shardIdx, vocabIdx) so query
+// rebuilds avoid repeated cumsum work. Cleared when the index reloads
+// (shard composition could have shifted).
 const _decodedPostingsCache = new Map();
-function _decodePostings(vi) {
-  if (_decodedPostingsCache.has(vi)) return _decodedPostingsCache.get(vi);
+function _decodePostings(shardIdx, vi) {
+  const cacheKey = shardIdx + ':' + vi;
+  if (_decodedPostingsCache.has(cacheKey)) return _decodedPostingsCache.get(cacheKey);
   const idx = state.searchIndex;
-  if (!idx || !idx.postings[vi]) return [];
-  const delta = idx.postings[vi];
+  if (!idx || !idx.shards[shardIdx]) return [];
+  const delta = idx.shards[shardIdx].postings[vi];
+  if (!delta || !delta.length) return [];
   const out = new Array(delta.length);
   let acc = delta[0] | 0;
   out[0] = acc;
@@ -943,7 +995,7 @@ function _decodePostings(vi) {
     acc += delta[i] | 0;
     out[i] = acc;
   }
-  _decodedPostingsCache.set(vi, out);
+  _decodedPostingsCache.set(cacheKey, out);
   return out;
 }
 
@@ -964,16 +1016,21 @@ function _expandPrefix(prefix) {
 }
 
 // Returns Set<reportKey> of docs containing any token starting with `tokenStr`.
-// Used by applyFilters to precompute index-based hits per query token.
+// Iterates all shards; each shard's postings are local to its own
+// report_keys array, so we resolve via shard.report_keys[localIdx].
 function _expandTokenToDocs(tokenStr) {
   const idx = state.searchIndex;
-  if (!idx) return null;   // null = "no index loaded; fall back to substring paths only"
+  if (!idx || !idx.shards || !idx.shards.length) return null;
   const vis = _expandPrefix(tokenStr);
   if (!vis.length) return new Set();
   const out = new Set();
-  for (const vi of vis) {
-    for (const docIdx of _decodePostings(vi)) {
-      out.add(idx.report_keys[docIdx]);
+  for (let si = 0; si < idx.shards.length; si++) {
+    const shard = idx.shards[si];
+    const shardKeys = shard.report_keys || [];
+    for (const vi of vis) {
+      for (const localIdx of _decodePostings(si, vi)) {
+        out.add(shardKeys[localIdx]);
+      }
     }
   }
   return out;
