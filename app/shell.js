@@ -15,8 +15,9 @@ import {
   relativeTime, statusBucket,
   INTRO_SEEN_KEY,
 } from './deps.js';
-import { DRSCCorpus } from './corpora/drsc/index.js';
-import { CAGCorpus }  from './corpora/cag/index.js';
+import { DRSCCorpus }  from './corpora/drsc/index.js';
+import { CAGCorpus }   from './corpora/cag/index.js';
+import { BillsCorpus } from './corpora/bills/index.js';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -980,8 +981,9 @@ async function init() {
   // Register corpora before anything else so renderSettings can iterate
   // them and JS API can be built once. activeCorpusId stays null until
   // activate() sets it — that's what gates _activated bookkeeping.
-  corpora.set(DRSCCorpus.id, DRSCCorpus);
-  corpora.set(CAGCorpus.id,  CAGCorpus);
+  corpora.set(DRSCCorpus.id,  DRSCCorpus);
+  corpora.set(CAGCorpus.id,   CAGCorpus);
+  corpora.set(BillsCorpus.id, BillsCorpus);
 
   attachShellHandlers();
   buildJSAPI();
