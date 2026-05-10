@@ -271,6 +271,24 @@ main {
 .report-row:nth-child(even) { background: var(--surface2); }
 .report-row:hover { background: var(--surface3); }
 .report-row:last-child { border-bottom: none; }
+/* Mobile: collapse the rigid grid into a wrapping flex layout. Title takes a
+   full row, badges wrap inline below. Helps DRSC + CAG + Bills equally —
+   best-effort, not a full mobile redesign. */
+@media (max-width: 600px) {
+  .report-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    align-items: center;
+  }
+  .report-row > div:first-child {
+    flex: 1 1 100%;
+    margin-bottom: 2px;
+  }
+  .filters {
+    grid-template-columns: 1fr;
+  }
+}
 .report-title {
   font-weight: 500;
   color: var(--text);

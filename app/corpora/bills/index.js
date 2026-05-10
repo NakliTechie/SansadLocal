@@ -103,6 +103,15 @@ const state = {
 
   dialogChat: [],
   streamingContext: null,
+
+  // Deep search bundle (single corpus — what Chirag deferred at v1.0a was
+  // *cross-corpus* search; per-corpus deep search is in scope). Title scan
+  // is always-on; deep search adds title + first ~5K chars of every
+  // extracted bill.
+  searchBundle: null,
+  bundleLoading: false,
+  bundleLoaded:  false,
+  deepSearch: false,
 };
 
 let _deps = null;
@@ -291,6 +300,7 @@ function applyFilters() {
   const f = state.filters;
   const rawQ = f.search.trim();
   const parsedQ = rawQ ? parseQuery(rawQ) : null;
+  const bundle = state.searchBundle;
 
   const filtered = all.filter(b => {
     if (f.status && b.status !== f.status) return false;
@@ -300,17 +310,28 @@ function applyFilters() {
     if (f.billIntroducedInHouse && b.billIntroducedInHouse !== f.billIntroducedInHouse) return false;
     if (!parsedQ) return true;
 
+    const key = billKey(b);
     const titleLower = (b.billName || '').toLowerCase();
     const ministryLower = (b.ministryName || '').toLowerCase();
     const introducerLower = (b.billIntroducedBy || '').toLowerCase();
-    const cached = state.cache.text[billKey(b)];
+    const cached = state.cache.text[key];
     const cachedLower = cached ? cached.toLowerCase() : '';
+    const bundleEntry = bundle ? bundle.map.get(key) : null;
+    const headLower   = bundleEntry ? bundleEntry.head.toLowerCase() : '';
 
     function tokenHits(t) {
-      return titleLower.includes(t) || ministryLower.includes(t) || introducerLower.includes(t) || (cachedLower && cachedLower.includes(t));
+      return titleLower.includes(t)
+          || ministryLower.includes(t)
+          || introducerLower.includes(t)
+          || (cachedLower && cachedLower.includes(t))
+          || (headLower && headLower.includes(t));
     }
     function phraseHits(p) {
-      return titleLower.includes(p) || ministryLower.includes(p) || introducerLower.includes(p) || (cachedLower && cachedLower.includes(p));
+      return titleLower.includes(p)
+          || ministryLower.includes(p)
+          || introducerLower.includes(p)
+          || (cachedLower && cachedLower.includes(p))
+          || (headLower && headLower.includes(p));
     }
     return parsedQ.tokens.every(tokenHits) && parsedQ.phrases.every(phraseHits);
   });
@@ -344,10 +365,33 @@ function renderResultsLine() {
     metaLine = `Mirror updated <b>${escapeHtml(meta.last_update.replace('T', ' ').replace('Z', ' UTC'))}</b>`;
   }
   const withText = Object.keys(state.data.manifest?.texts || {}).length;
-  const indexLine = withText
-    ? `<span>Title search · <b>${withText}</b> bills with text</span>`
-    : '';
+  const bundle   = state.searchBundle;
+
+  let indexLine = '';
+  if (state.bundleLoading) {
+    indexLine = `<span class="indexing">Loading search bundle…</span>`;
+  } else if (state.deepSearch && state.bundleLoaded && bundle) {
+    indexLine = `<span title="Search hits titles + first ${bundle.head_chars} chars of every bill with extracted text.">Full-text search · ${bundle.total} bills</span>`;
+  } else if (withText) {
+    indexLine = `<span>Title search · <b>${withText}</b> bills with text · <a href="#" id="enableDeepLink" style="color:var(--accent)">enable deep search</a></span>`;
+  }
   el.innerHTML = `Showing <b>${shown}</b> of <b>${total}</b> bills. ${metaLine} ${indexLine}`;
+
+  const enableLink = document.getElementById('enableDeepLink');
+  if (enableLink) {
+    enableLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      state.deepSearch = true;
+      const s = loadSettings();
+      s.bills_deepSearch = true;
+      saveSettings(s);
+      renderResultsLine();
+      loadSearchBundle().then(() => {
+        renderResultsLine();
+        if (state.filters.search) applyFilters();
+      });
+    });
+  }
 }
 
 function renderList() {
@@ -366,12 +410,13 @@ function renderList() {
     const hi = b._houseInfo;
     const ti = b._typeInfo;
     const si = b._statusInfo;
-    const subline = [
-      b.billNumber ? `Bill ${b.billNumber}` : null,
-      b.ministryName,
-      b.billIntroducedBy,
-    ].filter(Boolean).join(' · ');
-    const yearStr = b.billYear ?? '—';
+    // Subline: bill number + year (Roman-numeral-friendly) → ministry → introducer.
+    // Year folded into subline so the row only has 4 trailing badges, fits the
+    // existing 5-column .report-row grid that DRSC and CAG already use.
+    const billRef = b.billNumber
+      ? (b.billYear ? `Bill ${b.billNumber} of ${b.billYear}` : `Bill ${b.billNumber}`)
+      : (b.billYear ? `${b.billYear}` : null);
+    const subline = [billRef, b.ministryName, b.billIntroducedBy].filter(Boolean).join(' · ');
     return `
       <div class="report-row" data-key="${escapeHtml(billKey(b))}">
         <div>
@@ -381,7 +426,6 @@ function renderList() {
         <span class="house-pill house-${hi.pill}" title="${escapeHtml(b.billIntroducedInHouse || '')}">${escapeHtml(hi.short)}</span>
         <span class="cat-badge cat-${ti.class}" title="${escapeHtml(b.billType || '')}">${escapeHtml(ti.short)}</span>
         <span class="cat-badge cat-${si.class}" title="${escapeHtml(b.status || '')}">${escapeHtml(si.label)}</span>
-        <span class="report-meta">${escapeHtml(String(yearStr))}</span>
         <span class="text-status ${hasSummary(b) ? 'summary' : (hasExtractedText(b) ? 'ok' : '')}">
           ${hasSummary(b) ? 'summary' : (hasExtractedText(b) ? 'text' : 'metadata')}
         </span>
@@ -801,6 +845,57 @@ async function loadCachedChats() {
   } catch {}
 }
 
+// ── Search bundle loader (deep-search, single-corpus) ─────────────────────
+
+function _parseBundle(b) {
+  const map = new Map();
+  for (const e of (b.entries || [])) map.set(e.key, { title: e.title, head: e.head });
+  return {
+    generated_at: b.generated_at,
+    head_chars:   b.head_chars,
+    total:        b.total,
+    map,
+  };
+}
+
+async function loadSearchBundle() {
+  if (state.bundleLoading) return state.searchBundle;
+  state.bundleLoading = true;
+  renderResultsLine();
+
+  // IDB cache restore (instant, possibly stale).
+  try {
+    const cached = await idbGet('blobs', 'bills-search-bundle.json');
+    if (cached) {
+      state.searchBundle = _parseBundle(cached);
+      state.bundleLoaded = true;
+      renderResultsLine();
+    }
+  } catch {}
+
+  // Network fetch (always — gets us the latest after a backfill commit).
+  try {
+    const dataUrl = _deps.config.dataBaseUrl;
+    const bucket  = Math.floor(Date.now() / 300000);
+    const res = await fetch(dataUrl + CORPUS_PREFIX + 'search-bundle.json?v=' + bucket, { cache: 'no-cache' });
+    if (!res.ok) throw new Error('search-bundle: ' + res.status);
+    const fresh = await res.json();
+    const cachedAt = state.searchBundle?.generated_at;
+    if (!cachedAt || (fresh.generated_at && fresh.generated_at > cachedAt)) {
+      state.searchBundle = _parseBundle(fresh);
+      state.bundleLoaded = true;
+      idbPut('blobs', 'bills-search-bundle.json', fresh).catch(() => {});
+    }
+  } catch (e) {
+    console.warn('Bills: search-bundle fetch failed', e);
+  } finally {
+    state.bundleLoading = false;
+    renderResultsLine();
+    if (state.filters.search) applyFilters();
+  }
+  return state.searchBundle;
+}
+
 // ── Filter row + handlers ──────────────────────────────────────────────────
 
 function renderFilterRow() {
@@ -872,6 +967,10 @@ async function activate(deps) {
 
   if (!_activated) {
     _activated = true;
+
+    const settings = loadSettings();
+    state.deepSearch = !!settings.bills_deepSearch;
+
     const ok = await fetchData();
     if (!ok) return false;
 
@@ -886,6 +985,7 @@ async function activate(deps) {
         renderList();
         renderResultsLine();
       }
+      if (state.deepSearch) loadSearchBundle();
     });
   } else {
     populateFilters();
@@ -911,22 +1011,57 @@ function renderSettingsSection(container) {
   const meta = state.data.meta;
   const totalBills = state.data.records.length;
   const withText = Object.keys(state.data.manifest?.texts || {}).length;
+  const bundle = state.searchBundle;
+
+  let bundleLine;
+  if (state.bundleLoaded && bundle) {
+    bundleLine = `Search bundle loaded: ${bundle.total} bills, ${bundle.head_chars} chars per entry.`;
+  } else if (state.bundleLoading) {
+    bundleLine = `Loading search bundle…`;
+  } else {
+    // Bundle is one file ~5KB × N bills; estimate without fetching.
+    const estMB = (withText * 5000 / (1024 * 1024)).toFixed(1);
+    bundleLine = `One-time download (~${estMB} MB), cached locally after first load.`;
+  }
 
   container.innerHTML = `
     <div class="settings-section">
+      <h3>Search (Bills)</h3>
+      <p>Enable deep search to fetch the bills bundle (title + first ${bundle?.head_chars || 5000} chars per bill with text). Cached locally after first load. Title/ministry/introducer search runs even without deep search.</p>
+      <div class="settings-row">
+        <label for="billsDeepSearch">Deep search</label>
+        <div>
+          <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.86rem; color:var(--text)">
+            <input type="checkbox" id="billsDeepSearch" ${state.deepSearch ? 'checked' : ''} style="width:auto"> Enable full-text search across bills
+          </label>
+          <p style="margin-top:6px; font-size:0.78rem; color:var(--muted)">${bundleLine}</p>
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
       <h3>Bills (Indian Parliament)</h3>
-      <p>Bills are indexed via sansad.in's public legislation API and mirrored daily. Full corpus: ${totalBills} bills (${(state.data.indexMeta?.shards?.length || 0)} shards). Text extraction backfill is incremental — currently ${withText} bills have extracted text.</p>
+      <p>Bills are indexed via sansad.in's public legislation API and mirrored daily + every 4 hours (backfill). Full corpus: ${totalBills} bills (${(indexMeta?.shards?.length || 0)} shards). Currently ${withText} bills have extracted text.</p>
       <p style="margin-top:8px; font-size:0.82rem; color:var(--muted)">
         ${meta?.last_update ? 'Mirror last updated ' + escapeHtml(meta.last_update) + '. ' : ''}
         ${meta?.in_rate_limit_cooldown ? 'Currently in rate-limit cooldown — extractions resume next cron tick. ' : ''}
-        Search is currently title + ministry + introducer + cached-text only. Deep search (full corpus body index) is on the v0.6 roadmap.
       </p>
     </div>
   `;
 }
 
 function applySettingsFromUI() {
-  // No settings yet that need persisting beyond the corpus's own state.
+  const cb = document.getElementById('billsDeepSearch');
+  if (!cb) return;
+  const wantsDeep = !!cb.checked;
+  if (wantsDeep === state.deepSearch) return;
+  state.deepSearch = wantsDeep;
+  const s = loadSettings();
+  s.bills_deepSearch = wantsDeep;
+  saveSettings(s);
+  if (wantsDeep && !state.bundleLoaded && !state.bundleLoading) {
+    loadSearchBundle();
+  }
+  renderResultsLine();
 }
 
 // ── fetchStatus (chip status display) ──────────────────────────────────────
