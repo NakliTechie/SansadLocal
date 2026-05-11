@@ -25,6 +25,7 @@ import {
   loadSearchIndex  as sharedLoadSearchIndex,
   expandTokenToDocs,
 } from '../../corpus-search.js';
+import { hydrateFromIDB } from '../../corpus-data.js';
 
 const CORPUS_PREFIX = 'cag/';
 
@@ -917,39 +918,26 @@ function exportSummariesMD() {
 
 // ── IDB hydration ──────────────────────────────────────────────────────────
 
+// IDB hydration — mechanism lives in app/corpus-data.js; we just declare
+// the store + key prefix + target object. Only cag|-prefixed keys are
+// touched so DRSC's and Bills's entries in the shared stores stay alone.
+
+const _matchCagKey = (k) => k.startsWith('cag|');
+
 async function loadCachedSummaries() {
-  try {
-    await idbCursor('summaries', 'readonly', (key, value) => {
-      // Only pick up cag-prefixed keys; leave DRSC's alone.
-      if (typeof key === 'string' && key.startsWith('cag|')) {
-        state.cache.summaries[key] = value;
-      }
-    });
-    renderList();
-  } catch {}
+  await hydrateFromIDB({ store: 'summaries', target: state.cache.summaries, matches: _matchCagKey });
+  renderList();
 }
 
 async function loadCachedChats() {
-  try {
-    await idbCursor('chats', 'readonly', (key, value) => {
-      if (typeof key === 'string' && key.startsWith('cag|')) {
-        state.cache.chats[key] = value;
-      }
-    });
-  } catch {}
+  await hydrateFromIDB({ store: 'chats', target: state.cache.chats, matches: _matchCagKey });
 }
 
 async function loadCachedTexts() {
-  let hydrated = 0;
-  try {
-    await idbCursor('texts', 'readonly', (key, value) => {
-      if (typeof key === 'string' && key.startsWith('cag|')) {
-        state.cache.text[key] = value;
-        hydrated++;
-      }
-    });
-  } catch {}
-  return hydrated;
+  const { added } = await hydrateFromIDB({
+    store: 'texts', target: state.cache.text, matches: _matchCagKey,
+  });
+  return added;
 }
 
 // ── Filter row HTML + handlers ──────────────────────────────────────────────

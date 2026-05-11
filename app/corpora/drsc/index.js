@@ -20,6 +20,7 @@ import {
   loadSearchIndex  as sharedLoadSearchIndex,
   expandTokenToDocs,
 } from '../../corpus-search.js';
+import { hydrateFromIDB } from '../../corpus-data.js';
 
 // All corpus data lives under `<dataBaseUrl>/<CORPUS_PREFIX>/...` after
 // v1.0a phase 2. The mirror moved DRSC's files into docs/drsc/ on the
@@ -980,49 +981,39 @@ function exportSummariesMD() {
 
 // ── IDB hydration ──────────────────────────────────────────────────────────
 
+// IDB hydration — mechanism lives in app/corpus-data.js. DRSC's text
+// hydration is special: pre-v0.4 sessions stored text keyed by
+// committee|<ls>|<num> for every LS variant of a number (file paths
+// weren't LS-namespaced). After v0.4 only one variant has a file on the
+// mirror; the others are stale orphans. We use the `validate` callback
+// to evict them in-place via 'readwrite' mode.
+
 async function loadCachedSummaries() {
-  // Hydrate cached summary keys + values so list badges render immediately.
-  try {
-    await idbCursor('summaries', 'readonly', (key, value) => {
-      state.cache.summaries[key] = value;
-    });
-    renderList();
-  } catch {}
+  // No key filter — DRSC was the original corpus, its summary keys have
+  // no prefix. Other corpora's keys (cag|*, bills|*) get loaded too but
+  // never read by DRSC, so it's harmless if a touch wasteful on memory.
+  await hydrateFromIDB({ store: 'summaries', target: state.cache.summaries });
+  renderList();
 }
 
 async function loadCachedChats() {
-  try {
-    await idbCursor('chats', 'readonly', (key, value) => {
-      state.cache.chats[key] = value;
-    });
-  } catch {}
+  await hydrateFromIDB({ store: 'chats', target: state.cache.chats });
 }
 
 async function loadCachedTexts() {
-  // Hydrate every cached extracted-text into state.cache.text. Validate each
-  // against the current manifest — pre-v0.4 sessions stored text keyed by
-  // committee|<ls>|<num> for every LS variant of a number (file paths
-  // weren't LS-namespaced). After v0.4 only one variant has a file on the
-  // mirror; the others are stale orphans whose content doesn't match the
-  // LS the key claims. Drop them as we walk so search doesn't match ghosts.
-  let hydrated = 0, dropped = 0;
-  try {
-    await idbCursor('texts', 'readwrite', (key, value) => {
+  const { added, dropped } = await hydrateFromIDB({
+    store: 'texts',
+    target: state.cache.text,
+    mode: 'readwrite',   // allow validate() to evict orphans in-place
+    validate: (key) => {
       const [committee, ls, num] = String(key).split('|');
       const safeNum = String(num ?? '').replace(/\//g, '-').replace(/\s+/g, '_');
       const mkey = ls ? `LS${ls}_${safeNum}` : safeNum;
-      const validInManifest = !!state.data.manifest?.texts?.[committee]?.[mkey];
-      if (validInManifest) {
-        state.cache.text[key] = value;
-        hydrated++;
-      } else {
-        dropped++;
-        return 'delete';
-      }
-    });
-    if (dropped) console.log(`loadCachedTexts: hydrated ${hydrated}, dropped ${dropped} stale orphan entries`);
-  } catch {}
-  return hydrated;
+      return !!state.data.manifest?.texts?.[committee]?.[mkey];
+    },
+  });
+  if (dropped) console.log(`loadCachedTexts: hydrated ${added}, dropped ${dropped} stale orphan entries`);
+  return added;
 }
 
 // ── Handlers ────────────────────────────────────────────────────────────────

@@ -34,6 +34,7 @@ import {
   loadSearchIndex  as sharedLoadSearchIndex,
   expandTokenToDocs,
 } from '../../corpus-search.js';
+import { hydrateFromIDB } from '../../corpus-data.js';
 
 const CORPUS_PREFIX = 'bills/';
 
@@ -834,70 +835,30 @@ async function chatSend(opts) {
   }
 }
 
+// IDB hydration — mechanism lives in app/corpus-data.js; only bills|-prefixed
+// keys are touched so DRSC's and CAG's entries in the shared stores stay
+// alone. (Replaces a verbose raw-IDB cursor implementation from the
+// pre-shared-module days.)
+
+const _matchBillsKey = (k) => k.startsWith('bills|');
+
 async function loadCachedTexts() {
-  // Cursor through 'texts' IDB store, pick rows whose key starts with 'bills|'.
-  // Safe to no-op on cursor errors — nothing depends on this for correctness.
-  let n = 0;
-  try {
-    const db = await import('../../deps.js').then(m => m.openIDB());
-    const tx = db.transaction('texts', 'readonly');
-    const store = tx.objectStore('texts');
-    await new Promise((resolve) => {
-      const req = store.openCursor();
-      req.onsuccess = () => {
-        const c = req.result;
-        if (!c) return resolve();
-        const k = c.key;
-        if (typeof k === 'string' && k.startsWith('bills|')) {
-          state.cache.text[k] = c.value;
-          n++;
-        }
-        c.continue();
-      };
-      req.onerror = () => resolve();
-    });
-  } catch {}
-  return n;
+  const { added } = await hydrateFromIDB({
+    store: 'texts', target: state.cache.text, matches: _matchBillsKey,
+  });
+  return added;
 }
 
 async function loadCachedSummaries() {
-  try {
-    const db = await import('../../deps.js').then(m => m.openIDB());
-    const tx = db.transaction('summaries', 'readonly');
-    const store = tx.objectStore('summaries');
-    await new Promise((resolve) => {
-      const req = store.openCursor();
-      req.onsuccess = () => {
-        const c = req.result;
-        if (!c) return resolve();
-        if (typeof c.key === 'string' && c.key.startsWith('bills|')) {
-          state.cache.summaries[c.key] = c.value;
-        }
-        c.continue();
-      };
-      req.onerror = () => resolve();
-    });
-  } catch {}
+  await hydrateFromIDB({
+    store: 'summaries', target: state.cache.summaries, matches: _matchBillsKey,
+  });
 }
 
 async function loadCachedChats() {
-  try {
-    const db = await import('../../deps.js').then(m => m.openIDB());
-    const tx = db.transaction('chats', 'readonly');
-    const store = tx.objectStore('chats');
-    await new Promise((resolve) => {
-      const req = store.openCursor();
-      req.onsuccess = () => {
-        const c = req.result;
-        if (!c) return resolve();
-        if (typeof c.key === 'string' && c.key.startsWith('bills|')) {
-          state.cache.chats[c.key] = c.value;
-        }
-        c.continue();
-      };
-      req.onerror = () => resolve();
-    });
-  } catch {}
+  await hydrateFromIDB({
+    store: 'chats', target: state.cache.chats, matches: _matchBillsKey,
+  });
 }
 
 // ── Search bundle + index ─────────────────────────────────────────────────
