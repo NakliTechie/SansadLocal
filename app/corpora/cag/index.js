@@ -221,12 +221,26 @@ async function fetchReportText(report) {
   if (!entry) return null;
   try {
     const res = await fetch(_deps.config.dataBaseUrl + CORPUS_PREFIX + entry.url);
-    if (!res.ok) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
     state.cache.text[key] = text;
     idbPut('texts', key, text).catch(() => {});
+    // Lazily mirror to disk if a folder is connected. Best-effort, silent
+    // when no folder. See CONV.md "Save-to-Disk pattern".
+    _deps.disk?.write?.('cag', entry.url, text).catch(() => {});
     return text;
   } catch (e) {
+    // Network failed. If the user has saved the corpus to disk and this
+    // text happens to be cached there, serve from disk and hydrate IDB
+    // so subsequent visits don't need disk again.
+    try {
+      const fromDisk = await _deps.disk?.read?.('cag', entry.url);
+      if (fromDisk) {
+        state.cache.text[key] = fromDisk;
+        idbPut('texts', key, fromDisk).catch(() => {});
+        return fromDisk;
+      }
+    } catch {}
     console.warn('CAG: failed to fetch text', e);
     return null;
   }

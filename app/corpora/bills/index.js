@@ -275,15 +275,24 @@ async function fetchBillText(bill) {
 
   const entry = state.data.manifest?.texts?.[bill.compositeId];
   if (!entry) return null;
+  const url = entry.url || `text/${bill.compositeId}.txt`;
   try {
-    const url = entry.url || `text/${bill.compositeId}.txt`;
     const res = await fetch(_deps.config.dataBaseUrl + CORPUS_PREFIX + url);
-    if (!res.ok) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
     state.cache.text[key] = text;
     idbPut('texts', key, text).catch(() => {});
+    _deps.disk?.write?.('bills', url, text).catch(() => {});
     return text;
   } catch (e) {
+    try {
+      const fromDisk = await _deps.disk?.read?.('bills', url);
+      if (fromDisk) {
+        state.cache.text[key] = fromDisk;
+        idbPut('texts', key, fromDisk).catch(() => {});
+        return fromDisk;
+      }
+    } catch {}
     console.warn('Bills: failed to fetch text', e);
     return null;
   }

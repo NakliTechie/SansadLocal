@@ -188,6 +188,7 @@ header {
 .disk-pill {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;   /* dot stays anchored left — same as .ai-pill */
   gap: 6px;
   padding: 4px 10px;
   font-size: 0.78rem;
@@ -204,9 +205,12 @@ header {
   border-color: var(--accent);
   color: var(--accent);
 }
-.disk-pill .disk-icon {
-  font-size: 0.95rem;
-  line-height: 1;
+.disk-pill .disk-dot {
+  /* Match .ai-dot exactly so the two pills have identical heights;
+     small square (vs the AI dot's circle) suggests "disk" iconographically. */
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  background: currentColor;
 }
 .disk-pill.connected {
   background: var(--green-bg);
@@ -836,7 +840,7 @@ mark {
   <div class="spacer"></div>
   <div class="header-stats" id="headerStats"></div>
   <button class="disk-pill" id="diskPill" hidden title="Save the index to a folder you control — works offline + portable">
-    <span class="disk-icon">&#128190;</span><span id="diskPillText">Save to Disk</span>
+    <span class="disk-dot"></span><span id="diskPillText">Save to Disk</span>
   </button>
   <button class="ai-pill" id="aiPill" title="AI status — click to configure"><span class="ai-dot"></span><span id="aiPillText">AI off</span></button>
   <button class="icon-btn" id="settingsBtn" title="Settings (AI model, BYOK)" aria-label="Settings">&#9881;</button>

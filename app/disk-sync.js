@@ -55,6 +55,25 @@ async function fetchText(url) {
   return res.text();
 }
 
+// Path-traversal helpers — walk into nested subdirectories before writing /
+// reading the leaf file. Used for paths like 'text/<id>.txt' or
+// 'text/<committee>/<file_id>.txt'.
+async function _getOrCreateDir(root, segments) {
+  let dir = root;
+  for (const seg of segments) {
+    dir = await dir.getDirectoryHandle(seg, { create: true });
+  }
+  return dir;
+}
+
+async function _getDirReadOnly(root, segments) {
+  let dir = root;
+  for (const seg of segments) {
+    dir = await dir.getDirectoryHandle(seg);
+  }
+  return dir;
+}
+
 // Each corpus's Tier A is its meta.json + the per-corpus-named primary
 // + manifest + audit + the shards listed in meta.{search_bundle,search_index}.shards.
 // Bills additionally has index-meta.json + index-*.json sharded by
@@ -207,6 +226,12 @@ export async function initDiskSync(deps) {
     if (perm === 'granted') {
       _dirHandle = stored;
       _state     = 'connected';
+      // Fire-and-forget staleness check — if the live mirror has updated
+      // since the last sync, this brings the disk copy up to date without
+      // requiring the user to click "Sync now". The pill briefly flips to
+      // "Syncing..." then back to "Synced • just now".
+      checkStalenessAndAutoSync().catch(e =>
+        console.warn('[disk-sync] auto-sync on init failed:', e));
     } else if (perm === 'prompt') {
       _dirHandle = stored;   // keep so reconnect() can request without re-picking
       _state     = 'reconnect-needed';
@@ -243,9 +268,14 @@ export async function reconnect() {
   const perm = await _dirHandle.requestPermission({ mode: 'readwrite' });
   if (perm === 'granted') {
     _state = 'connected';
-  } else {
-    _state = 'reconnect-needed';
+    notify();
+    // Same auto-sync as on init — the user has probably been away long
+    // enough for the mirror to have moved, so refresh in the background.
+    checkStalenessAndAutoSync().catch(e =>
+      console.warn('[disk-sync] auto-sync on reconnect failed:', e));
+    return getDiskSyncState();
   }
+  _state = 'reconnect-needed';
   notify();
   return getDiskSyncState();
 }
@@ -266,4 +296,115 @@ export async function disconnect() {
   _state = isSupported ? 'unsaved' : 'unsupported';
   notify();
   return getDiskSyncState();
+}
+
+// ── Per-asset read / write (Phase 2) ──────────────────────────────────────
+//
+// The corpus modules call these after their normal fetch sites to lazily
+// mirror to disk (write) or to fall back when network fails (read).
+// Both are best-effort and silent on disconnect — corpora can call them
+// optimistically without guarding `isConnected()` first.
+//
+// `path` is the relative path under `<root>/<corpusId>/`. It can contain
+// `/` separators for nested subdirectories (e.g. `text/123.txt` or
+// `text/rural_development/LS18_32.txt`).
+
+export function diskIsConnected() {
+  return _state === 'connected' && !!_dirHandle;
+}
+
+export async function diskWrite(corpusId, path, content) {
+  if (!diskIsConnected()) return false;
+  try {
+    const sub = await _dirHandle.getDirectoryHandle(corpusId, { create: true });
+    const parts = path.split('/').filter(Boolean);
+    if (!parts.length) return false;
+    const filename = parts.pop();
+    const dir = await _getOrCreateDir(sub, parts);
+    const body = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+    const fileHandle = await dir.getFileHandle(filename, { create: true });
+    const writable   = await fileHandle.createWritable();
+    await writable.write(body);
+    await writable.close();
+    return true;
+  } catch (e) {
+    // QuotaExceededError, write permission revoked mid-session, etc.
+    // Don't block the caller — disk is opportunistic, not authoritative.
+    console.warn(`[disk-sync] write ${corpusId}/${path} failed:`, e?.message || e);
+    return false;
+  }
+}
+
+export async function diskRead(corpusId, path) {
+  if (!diskIsConnected()) return null;
+  try {
+    const sub = await _dirHandle.getDirectoryHandle(corpusId);
+    const parts = path.split('/').filter(Boolean);
+    if (!parts.length) return null;
+    const filename = parts.pop();
+    const dir = await _getDirReadOnly(sub, parts);
+    const fileHandle = await dir.getFileHandle(filename);
+    const file = await fileHandle.getFile();
+    return await file.text();
+  } catch (e) {
+    // NotFoundError is the common path (file just not cached on disk yet).
+    // Stay silent on that; only warn for other surprises.
+    if (e?.name !== 'NotFoundError') {
+      console.warn(`[disk-sync] read ${corpusId}/${path} failed:`, e?.message || e);
+    }
+    return null;
+  }
+}
+
+// ── Auto-staleness check on init ─────────────────────────────────────────
+//
+// When we re-attach to a previously-saved folder on page load, we don't
+// know if the live mirror has updated since the last sync. Compare each
+// corpus's on-disk meta.json's `generated_at` against the live one; if
+// they differ, kick off a background sync for that corpus. Quiet —
+// surfaces via the pill changing to "Syncing..." then back to "Synced".
+
+async function checkStalenessAndAutoSync() {
+  if (!diskIsConnected()) return;
+  const dataUrl = _deps.config.dataBaseUrl;
+  const ids = corpusIds();
+  const stale = [];
+  for (const id of ids) {
+    try {
+      const cfText = await fetchText(`${dataUrl}${id}/meta.json`);
+      const cfMeta = JSON.parse(cfText);
+      const diskText = await diskRead(id, 'meta.json');
+      if (!diskText) {
+        stale.push(id);
+        continue;
+      }
+      try {
+        const diskMeta = JSON.parse(diskText);
+        if (diskMeta.generated_at !== cfMeta.generated_at) stale.push(id);
+      } catch {
+        stale.push(id);
+      }
+    } catch (e) {
+      // Network failure or CF down — skip this corpus's check, leave
+      // the disk copy intact. The disk file is still useful as-is.
+      console.info(`[disk-sync] staleness check for ${id} skipped: ${e?.message || e}`);
+    }
+  }
+  if (!stale.length) return;
+  console.info(`[disk-sync] re-syncing stale corpora: ${stale.join(', ')}`);
+  _syncing = true;
+  notify();
+  try {
+    for (const id of stale) {
+      try {
+        await syncCorpus(id, _dirHandle, () => {});
+      } catch (e) {
+        console.warn(`[disk-sync] re-sync of ${id} failed:`, e?.message || e);
+      }
+    }
+    _lastSyncAt = Date.now();
+  } finally {
+    _syncing = false;
+    notify();
+  }
 }

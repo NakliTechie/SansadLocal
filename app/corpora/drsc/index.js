@@ -269,12 +269,21 @@ async function fetchReportText(report) {
 
   try {
     const res = await fetch(_deps.config.dataBaseUrl + CORPUS_PREFIX + entry.url);
-    if (!res.ok) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
     state.cache.text[key] = text;
     idbPut('texts', key, text).catch(() => {});
+    _deps.disk?.write?.('drsc', entry.url, text).catch(() => {});
     return text;
   } catch (e) {
+    try {
+      const fromDisk = await _deps.disk?.read?.('drsc', entry.url);
+      if (fromDisk) {
+        state.cache.text[key] = fromDisk;
+        idbPut('texts', key, fromDisk).catch(() => {});
+        return fromDisk;
+      }
+    } catch {}
     console.warn('Failed to fetch text', e);
     return null;
   }

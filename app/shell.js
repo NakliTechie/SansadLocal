@@ -21,6 +21,7 @@ import { BillsCorpus } from './corpora/bills/index.js';
 import {
   initDiskSync, getDiskSyncState, onDiskSyncChange,
   connectAndSync, reconnect, syncNow,
+  diskIsConnected, diskRead, diskWrite,
 } from './disk-sync.js';
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -968,6 +969,19 @@ const deps = {
   // the last-to-fire would stomp the active corpus's render. Each
   // corpus's switchReportTab early-returns if `deps.activeCorpus() !== <id>`.
   activeCorpus: () => activeCorpusId,
+
+  // "Save to Disk" hooks for opt-in disk caching. Each corpus calls
+  // `deps.disk?.write?.(corpusId, path, content)` after a successful
+  // network fetch to lazily mirror new content to the user's folder, and
+  // `deps.disk?.read?.(corpusId, path)` as an offline fallback when
+  // network fails. Both are best-effort and silent when no folder is
+  // connected — corpora can call them optimistically without guards.
+  // See CONV.md "Save-to-Disk pattern".
+  disk: {
+    isConnected: diskIsConnected,
+    read:        diskRead,
+    write:       diskWrite,
+  },
 
   broadcast,
   onBroadcast,
