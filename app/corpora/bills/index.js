@@ -996,11 +996,16 @@ function attachHandlers() {
 
 // ── Activation ──────────────────────────────────────────────────────────────
 
-async function activate(deps) {
+async function activate(deps, { silent = false } = {}) {
   _deps = deps;
 
-  renderFilterRow();
-  attachHandlers();
+  // Silent mode (used by shell to preload non-active corpora for
+  // cross-corpus search) skips DOM mutation so it doesn't fight the
+  // currently-active corpus's render.
+  if (!silent) {
+    renderFilterRow();
+    attachHandlers();
+  }
 
   if (!_activated) {
     _activated = true;
@@ -1011,14 +1016,16 @@ async function activate(deps) {
     const ok = await fetchData();
     if (!ok) return false;
 
-    populateFilters();
-    renderHeaderStats();
-    applyFilters();
+    if (!silent) {
+      populateFilters();
+      renderHeaderStats();
+      applyFilters();
+    }
 
     loadCachedSummaries();
     loadCachedChats();
     loadCachedTexts().then((n) => {
-      if (n) {
+      if (n && !silent) {
         renderList();
         renderResultsLine();
       }
@@ -1027,7 +1034,7 @@ async function activate(deps) {
         loadSearchIndex();
       }
     });
-  } else {
+  } else if (!silent) {
     populateFilters();
     renderHeaderStats();
     applyFilters();

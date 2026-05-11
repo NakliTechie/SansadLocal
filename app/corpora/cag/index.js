@@ -1022,13 +1022,17 @@ function attachHandlers() {
 
 // ── Activation / lifecycle ──────────────────────────────────────────────────
 
-async function activate(deps) {
+async function activate(deps, { silent = false } = {}) {
   _deps = deps;
 
   // Always re-render filter row + handlers so a corpus switch back to CAG
-  // restores the right UI in #filtersContainer.
-  renderFilterRow();
-  attachHandlers();
+  // restores the right UI in #filtersContainer. Skip when silent (preload
+  // mode — shell prefetches data for cross-corpus search without
+  // disturbing the visible DOM that belongs to another corpus).
+  if (!silent) {
+    renderFilterRow();
+    attachHandlers();
+  }
 
   if (!_activated) {
     _activated = true;
@@ -1040,14 +1044,16 @@ async function activate(deps) {
     const ok = await fetchData();
     if (!ok) return false;
 
-    populateFilters();
-    renderHeaderStats();
-    applyFilters();
+    if (!silent) {
+      populateFilters();
+      renderHeaderStats();
+      applyFilters();
+    }
 
     loadCachedSummaries();
     loadCachedChats();
     loadCachedTexts().then((n) => {
-      if (n) {
+      if (n && !silent) {
         renderList();
         renderResultsLine();
       }
@@ -1056,7 +1062,7 @@ async function activate(deps) {
         loadSearchIndex();
       }
     });
-  } else {
+  } else if (!silent) {
     populateFilters();
     renderHeaderStats();
     applyFilters();

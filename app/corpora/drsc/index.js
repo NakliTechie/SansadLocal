@@ -1206,14 +1206,19 @@ function applySettingsFromUI() {
 // back to DRSC from another corpus that overwrote `#filtersContainer`.
 let _activated = false;
 
-async function activate(deps) {
+async function activate(deps, { silent = false } = {}) {
   _deps = deps;
 
-  // ALWAYS — re-render filter row + handlers + applied filters so a
-  // corpus-switch round-trip restores DRSC's UI even if CAG (or another
-  // corpus) replaced the DOM in `#filtersContainer`.
-  renderFilterRow();
-  attachHandlers();
+  // ALWAYS (when not silent) — re-render filter row + handlers + applied
+  // filters so a corpus-switch round-trip restores DRSC's UI even if CAG
+  // or Bills replaced the DOM in `#filtersContainer`. Silent mode (used
+  // by shell to preload non-active corpora for cross-corpus search)
+  // skips DOM mutation entirely so it doesn't fight the currently-active
+  // corpus's render.
+  if (!silent) {
+    renderFilterRow();
+    attachHandlers();
+  }
 
   if (!_activated) {
     _activated = true;
@@ -1224,14 +1229,16 @@ async function activate(deps) {
 
     const ok = await fetchData();
     if (!ok) return false;
-    populateFilters();
-    renderHeaderStats();
-    applyFilters();
+    if (!silent) {
+      populateFilters();
+      renderHeaderStats();
+      applyFilters();
+    }
 
     loadCachedSummaries();
     loadCachedChats();
     loadCachedTexts().then((n) => {
-      if (n) {
+      if (n && !silent) {
         renderList();
         renderResultsLine();
       }
@@ -1243,7 +1250,7 @@ async function activate(deps) {
         loadSearchIndex();
       }
     });
-  } else {
+  } else if (!silent) {
     // Re-mount: data already fetched, just refresh the visible UI.
     populateFilters();
     renderHeaderStats();

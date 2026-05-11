@@ -1130,6 +1130,17 @@ async function init() {
   // Activate the first corpus — this also renders chips and fetches data.
   await activate(DRSCCorpus.id);
 
+  // Background preload of the other corpora so cross-corpus search has
+  // their data ready. `silent: true` runs the corpus's data-fetch path
+  // without touching the visible DOM (filter row / list / chips are
+  // owned by the active corpus). See CONV.md "Cross-corpus search".
+  for (const c of corpora.values()) {
+    if (c.id === DRSCCorpus.id) continue;
+    if (typeof c.activate !== 'function') continue;
+    c.activate(deps, { silent: true }).catch(e =>
+      console.warn(`[shell] silent preload of ${c.id} failed:`, e));
+  }
+
   // First-visit hint: auto-open Help once. Per-machine flag, separate from
   // the settings JSON so toggling settings doesn't reset it.
   try {
