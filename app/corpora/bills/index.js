@@ -712,20 +712,34 @@ async function generateSummary() {
     { role: 'system', content: 'You are a careful, accurate summariser of Indian parliamentary bills.' },
     { role: 'user',   content: prompt },
   ];
-  state.cache.summaries[key] = '';
+
+  // Track partial output in a local `inflight` rather than mutating
+  // state.cache.summaries[key]. Regenerate failure keeps old summary;
+  // substantive partial errors persist; empty errors leave the cache
+  // alone. See CONV.md "Streaming AI persistence pattern".
+  const previousCached = state.cache.summaries[key] || '';
+  let inflight = '';
   state.streamingContext = { billKey: key, tab: 'summary' };
   renderSummaryTab();
   try {
     await _deps.ai.generate(messages, (tok) => {
-      state.cache.summaries[key] = (state.cache.summaries[key] || '') + tok;
-      const box = document.getElementById('summaryBox');
-      if (box && state.streamingContext?.billKey === key) {
-        box.textContent = state.cache.summaries[key];
+      inflight += tok;
+      if (state.streamingContext?.billKey === key) {
+        const box = document.getElementById('summaryBox');
+        if (box) box.textContent = inflight;
       }
     });
-    idbPut('summaries', key, state.cache.summaries[key]).catch(() => {});
+    state.cache.summaries[key] = inflight;
+    idbPut('summaries', key, inflight).catch(() => {});
   } catch (e) {
-    state.cache.summaries[key] = (state.cache.summaries[key] || '') + '\n\n[Error: ' + e.message + ']';
+    if (inflight.length > 100) {
+      const final = inflight + '\n\n[Error: ' + e.message + ']';
+      state.cache.summaries[key] = final;
+      idbPut('summaries', key, final).catch(() => {});
+    } else {
+      state.cache.summaries[key] = previousCached;
+      _deps.ui.toast('Summary generation failed: ' + e.message);
+    }
   } finally {
     state.streamingContext = null;
     renderSummaryTab();
@@ -743,62 +757,69 @@ async function chatSend(opts) {
   if (_deps.ai.streaming()) { _deps.ui.toast('Already responding…'); return; }
   const text = await fetchBillText(b);
   if (!text) { _deps.ui.toast('Full text not available'); return; }
+
+  // From here on, state.dialogChat is mutated. Wrap in try/finally so
+  // EVERY exit path persists the conversation to IDB — including early
+  // returns from the search-config branch. See CONV.md "Streaming AI
+  // persistence pattern".
+  const k = billKey(b);
   state.dialogChat.push({ role: 'user', content: q });
-  let searchResults = null;
-  if (opts.withSearch) {
-    if (!_deps.search.isConfigured()) {
-      state.dialogChat.push({ role: 'system', content: 'Web search not configured. Open Settings → Web search to add a provider.' });
-      input.value = '';
-      renderChatTab();
-      return;
-    }
-    state.dialogChat.push({ role: 'system', content: `Searching the web for "${q}"…` });
-    renderChatTab();
-    try {
-      searchResults = await _deps.search.run(q);
-      const resultLine = searchResults.length
-        ? `Found ${searchResults.length} result${searchResults.length === 1 ? '' : 's'}: ${searchResults.map(x => x.title).slice(0, 3).join(' · ')}${searchResults.length > 3 ? '…' : ''}`
-        : 'No web results.';
-      state.dialogChat[state.dialogChat.length - 1] = { role: 'system', content: resultLine };
-    } catch (e) {
-      state.dialogChat[state.dialogChat.length - 1] = { role: 'system', content: 'Search failed: ' + e.message };
-      searchResults = null;
-    }
-  }
-  state.dialogChat.push({ role: 'assistant', content: '' });
-  state.streamingContext = { billKey: billKey(b), tab: 'chat' };
-  input.value = '';
-  renderChatTab();
-  const summary = state.cache.summaries[billKey(b)];
-  const userPrompt = buildAskPrompt({
-    summary: summary || null,
-    text: _truncateForContext(text),
-    searchResults,
-    question: q,
-  });
-  const messages = [
-    { role: 'system', content: 'You answer questions about bills from the Indian Parliament. Use only the supplied material. If the answer is not present, say so.' },
-    { role: 'user',   content: userPrompt },
-  ];
   try {
-    await _deps.ai.generate(messages, (tok) => {
-      const last = state.dialogChat[state.dialogChat.length - 1];
-      last.content += tok;
-      const lastEl = document.querySelector('#chatThread .chat-msg.assistant:last-child');
-      if (lastEl) {
-        lastEl.textContent = last.content;
-        const t = document.getElementById('chatThread');
-        if (t) t.scrollTop = t.scrollHeight;
+    let searchResults = null;
+    if (opts.withSearch) {
+      if (!_deps.search.isConfigured()) {
+        state.dialogChat.push({ role: 'system', content: 'Web search not configured. Open Settings → Web search to add a provider.' });
+        input.value = '';
+        renderChatTab();
+        return;
       }
+      state.dialogChat.push({ role: 'system', content: `Searching the web for "${q}"…` });
+      renderChatTab();
+      try {
+        searchResults = await _deps.search.run(q);
+        const resultLine = searchResults.length
+          ? `Found ${searchResults.length} result${searchResults.length === 1 ? '' : 's'}: ${searchResults.map(x => x.title).slice(0, 3).join(' · ')}${searchResults.length > 3 ? '…' : ''}`
+          : 'No web results.';
+        state.dialogChat[state.dialogChat.length - 1] = { role: 'system', content: resultLine };
+      } catch (e) {
+        state.dialogChat[state.dialogChat.length - 1] = { role: 'system', content: 'Search failed: ' + e.message };
+        searchResults = null;
+      }
+    }
+    state.dialogChat.push({ role: 'assistant', content: '' });
+    state.streamingContext = { billKey: billKey(b), tab: 'chat' };
+    input.value = '';
+    renderChatTab();
+    const summary = state.cache.summaries[billKey(b)];
+    const userPrompt = buildAskPrompt({
+      summary: summary || null,
+      text: _truncateForContext(text),
+      searchResults,
+      question: q,
     });
-  } catch (e) {
-    const last = state.dialogChat[state.dialogChat.length - 1];
-    last.error = true;
-    last.content = 'Error: ' + e.message;
+    const messages = [
+      { role: 'system', content: 'You answer questions about bills from the Indian Parliament. Use only the supplied material. If the answer is not present, say so.' },
+      { role: 'user',   content: userPrompt },
+    ];
+    try {
+      await _deps.ai.generate(messages, (tok) => {
+        const last = state.dialogChat[state.dialogChat.length - 1];
+        last.content += tok;
+        const lastEl = document.querySelector('#chatThread .chat-msg.assistant:last-child');
+        if (lastEl) {
+          lastEl.textContent = last.content;
+          const t = document.getElementById('chatThread');
+          if (t) t.scrollTop = t.scrollHeight;
+        }
+      });
+    } catch (e) {
+      const last = state.dialogChat[state.dialogChat.length - 1];
+      last.error = true;
+      last.content = 'Error: ' + e.message;
+    }
   } finally {
     state.streamingContext = null;
     renderChatTab();
-    const k = billKey(b);
     state.cache.chats[k] = [...state.dialogChat];
     idbPut('chats', k, state.dialogChat).catch(() => {});
   }
