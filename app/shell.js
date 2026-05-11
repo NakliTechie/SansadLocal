@@ -19,6 +19,7 @@ import { DRSCCorpus }  from './corpora/drsc/index.js';
 import { CAGCorpus }   from './corpora/cag/index.js';
 import { BillsCorpus } from './corpora/bills/index.js';
 import { LCCorpus }    from './corpora/lc/index.js';
+import { FCCorpus }    from './corpora/fc/index.js';
 import {
   initDiskSync, getDiskSyncState, onDiskSyncChange,
   connectAndSync, reconnect, syncNow,
@@ -1112,6 +1113,7 @@ async function init() {
   corpora.set(CAGCorpus.id,   CAGCorpus);
   corpora.set(BillsCorpus.id, BillsCorpus);
   corpora.set(LCCorpus.id,    LCCorpus);
+  corpora.set(FCCorpus.id,    FCCorpus);
 
   attachShellHandlers();
   buildJSAPI();
