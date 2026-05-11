@@ -28,6 +28,12 @@ import {
   loadSettings, saveSettings,
 } from '../../deps.js';
 import { streamWithPersistence } from '../../ai-streaming.js';
+import {
+  parseQuery, highlightMatches,
+  loadSearchBundle as sharedLoadSearchBundle,
+  loadSearchIndex  as sharedLoadSearchIndex,
+  expandTokenToDocs,
+} from '../../corpus-search.js';
 
 const CORPUS_PREFIX = 'bills/';
 
@@ -164,24 +170,6 @@ function hasExtractedText(b) {
 
 function hasSummary(b) {
   return !!state.cache.summaries[billKey(b)];
-}
-
-// ── Search query parsing (substring-only; deep-search bundle deferred) ─────
-
-function parseQuery(raw) {
-  if (!raw) return { tokens: [], phrases: [] };
-  const phrases = [];
-  let s = raw.replace(/"([^"]+)"/g, (_, p) => { phrases.push(p.toLowerCase().trim()); return ' '; });
-  const tokens = s.split(/\s+/).filter(Boolean).map(t => t.toLowerCase());
-  return { tokens, phrases };
-}
-
-function highlightMatches(text, parsedQ) {
-  if (!parsedQ || (!parsedQ.tokens.length && !parsedQ.phrases.length)) return escapeHtml(text);
-  const all = [...parsedQ.phrases, ...parsedQ.tokens].filter(Boolean).sort((a, b) => b.length - a.length);
-  if (!all.length) return escapeHtml(text);
-  const re = new RegExp(`(${all.map(t => t.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})`, 'gi');
-  return escapeHtml(text).replace(re, '<mark>$1</mark>');
 }
 
 // ── Data fetching (sharded) ────────────────────────────────────────────────
@@ -321,7 +309,7 @@ function applyFilters() {
   // (full-corpus token presence). Phrases can't use the index (token-level
   // only) — they fall back to title + bundle.head + cached-text scan.
   const tokenIndexSets = parsedQ
-    ? parsedQ.tokens.map(t => _expandTokenToDocs(t))
+    ? parsedQ.tokens.map(t => expandTokenToDocs(state.searchIndex, t))
     : [];
 
   const filtered = all.filter(b => {
@@ -912,200 +900,37 @@ async function loadCachedChats() {
   } catch {}
 }
 
-// ── Search bundle (sharded, mirrors DRSC/CAG v1.0c) ────────────────────────
-
-function _parseBundle(b) {
-  // Accept both shapes: (a) merged blob {entries: [...]} or (b) merged from
-  // shards via `entries` array concatenation upstream.
-  const map = new Map();
-  for (const e of (b.entries || [])) map.set(e.key, { title: e.title, head: e.head });
-  return {
-    generated_at: b.generated_at,
-    head_chars:   b.head_chars,
-    total:        b.total,
-    map,
-  };
-}
+// ── Search bundle + index ─────────────────────────────────────────────────
+//
+// Mechanism lives in app/corpus-search.js; these are thin wrappers that
+// supply Bills's IDB keys + URL prefix + meta + state-update hooks. The
+// shared module owns the parse / IDB cache / sharded fetch / in-flight
+// dedupe logic — one implementation across DRSC, CAG, and Bills.
 
 async function loadSearchBundle() {
-  if (state.bundleLoading) return state.searchBundle;
-  state.bundleLoading = true;
-  renderResultsLine();
-
-  // IDB cache restore (instant, possibly stale). Cache key now stores the
-  // already-merged bundle for fast restore.
-  try {
-    const cached = await idbGet('blobs', 'bills-search-bundle.json');
-    if (cached) {
-      state.searchBundle = _parseBundle(cached);
-      state.bundleLoaded = true;
-      renderResultsLine();
-    }
-  } catch {}
-
-  // Network fetch — fetch all shards in parallel, merge entries, then cache
-  // the merged blob in IDB for the next load. Shards listed in
-  // meta.search_bundle.shards. If meta is unavailable (rare race during
-  // first-ever load), bail; the next reload will pick it up.
-  try {
-    const meta = state.data.meta;
-    const shardList = meta?.search_bundle?.shards;
-    if (!shardList || !shardList.length) {
-      console.info('Bills: search_bundle.shards missing from meta; skipping fetch');
-      return state.searchBundle;
-    }
-    const dataUrl = _deps.config.dataBaseUrl;
-    const bucket  = Math.floor(Date.now() / 300000);
-    const shards = await Promise.all(shardList.map(name =>
-      fetch(dataUrl + CORPUS_PREFIX + name + '?v=' + bucket, { cache: 'no-cache' })
-        .then(r => r.ok ? r.json() : Promise.reject(`${name}: ${r.status}`))
-    ));
-
-    let head_chars   = 5000;
-    let generated_at = '';
-    const entries    = [];
-    for (const s of shards) {
-      head_chars = s.head_chars || head_chars;
-      if (s.generated_at && s.generated_at > generated_at) generated_at = s.generated_at;
-      if (s.entries) entries.push(...s.entries);
-    }
-    const merged = { generated_at, head_chars, total: entries.length, entries };
-    const cachedAt = state.searchBundle?.generated_at;
-    if (!cachedAt || (generated_at && generated_at > cachedAt)) {
-      state.searchBundle = _parseBundle(merged);
-      state.bundleLoaded = true;
-      idbPut('blobs', 'bills-search-bundle.json', merged).catch(() => {});
-    }
-  } catch (e) {
-    console.warn('Bills: search-bundle fetch failed', e);
-  } finally {
-    state.bundleLoading = false;
-    renderResultsLine();
-    if (state.filters.search) applyFilters();
-  }
-  return state.searchBundle;
-}
-
-// ── Search index (sharded inverted token index, mirrors CAG v1.0c) ─────────
-
-function _parseIndex(raw) {
-  const shards = raw.shards || [];
-  if (!shards.length) return null;
-  const vocab = shards[0].vocab || [];
-  let report_count = 0;
-  let generated_at = '';
-  for (const s of shards) {
-    report_count += (s.report_keys || []).length;
-    if (s.generated_at && s.generated_at > generated_at) generated_at = s.generated_at;
-  }
-  return {
-    generated_at,
-    report_count,
-    vocab_size: vocab.length,
-    vocab,
-    shards,
-  };
+  return sharedLoadSearchBundle({
+    state,
+    corpusId:    'bills',
+    idbKey:      'bills-search-bundle.json',
+    urlPath:     CORPUS_PREFIX,
+    meta:        state.data.meta,
+    deps:        _deps,
+    onChange:    renderResultsLine,
+    onAfterLoad: () => { if (state.filters.search) applyFilters(); },
+  });
 }
 
 async function loadSearchIndex() {
-  if (state.indexLoading) return state.searchIndex;
-  state.indexLoading = true;
-  renderResultsLine();
-
-  try {
-    const cached = await idbGet('blobs', 'bills-search-index.json');
-    if (cached && cached.shards) {
-      state.searchIndex = _parseIndex(cached);
-      state.indexLoaded = true;
-      renderResultsLine();
-    }
-  } catch {}
-
-  try {
-    const meta = state.data.meta;
-    const shardList = meta?.search_index?.shards;
-    if (!shardList || !shardList.length) {
-      console.info('Bills: search_index.shards missing from meta; skipping fetch');
-      return state.searchIndex;
-    }
-    const dataUrl = _deps.config.dataBaseUrl;
-    const bucket  = Math.floor(Date.now() / 300000);
-    const shards = await Promise.all(shardList.map(name =>
-      fetch(dataUrl + CORPUS_PREFIX + name + '?v=' + bucket, { cache: 'no-cache' })
-        .then(r => r.ok ? r.json() : Promise.reject(`${name}: ${r.status}`))
-    ));
-    let generated_at = '';
-    for (const s of shards) {
-      if (s.generated_at && s.generated_at > generated_at) generated_at = s.generated_at;
-    }
-    const cachedAt = state.searchIndex?.generated_at;
-    if (!cachedAt || (generated_at && generated_at > cachedAt)) {
-      const blob = { shards };
-      state.searchIndex = _parseIndex(blob);
-      state.indexLoaded = true;
-      idbPut('blobs', 'bills-search-index.json', blob).catch(() => {});
-      _decodedPostingsCache.clear();
-    }
-  } catch (e) {
-    console.warn('Bills: search-index fetch failed', e);
-  } finally {
-    state.indexLoading = false;
-    renderResultsLine();
-    if (state.filters.search) applyFilters();
-  }
-  return state.searchIndex;
-}
-
-// Per-session decoded posting cache. Key is `${shardIdx}:${vocabIdx}`.
-const _decodedPostingsCache = new Map();
-function _decodePostings(shardIdx, vi) {
-  const cacheKey = shardIdx + ':' + vi;
-  if (_decodedPostingsCache.has(cacheKey)) return _decodedPostingsCache.get(cacheKey);
-  const idx = state.searchIndex;
-  if (!idx || !idx.shards[shardIdx]) return [];
-  const delta = idx.shards[shardIdx].postings[vi];
-  if (!delta || !delta.length) return [];
-  const out = new Array(delta.length);
-  let acc = delta[0] | 0;
-  out[0] = acc;
-  for (let i = 1; i < delta.length; i++) {
-    acc += delta[i] | 0;
-    out[i] = acc;
-  }
-  _decodedPostingsCache.set(cacheKey, out);
-  return out;
-}
-
-function _expandPrefix(prefix) {
-  const idx = state.searchIndex;
-  if (!idx || !idx.vocab.length || !prefix) return [];
-  const vocab = idx.vocab;
-  let lo = 0, hi = vocab.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (vocab[mid] < prefix) lo = mid + 1; else hi = mid;
-  }
-  const out = [];
-  for (let i = lo; i < vocab.length && vocab[i].startsWith(prefix); i++) out.push(i);
-  return out;
-}
-
-function _expandTokenToDocs(tokenStr) {
-  const idx = state.searchIndex;
-  if (!idx || !idx.shards || !idx.shards.length) return null;
-  const vis = _expandPrefix(tokenStr);
-  if (!vis.length) return new Set();
-  const out = new Set();
-  for (let si = 0; si < idx.shards.length; si++) {
-    const shard = idx.shards[si];
-    const shardKeys = shard.report_keys || [];
-    for (const vi of vis) {
-      for (const localIdx of _decodePostings(si, vi)) {
-        out.add(shardKeys[localIdx]);
-      }
-    }
-  }
-  return out;
+  return sharedLoadSearchIndex({
+    state,
+    corpusId:    'bills',
+    idbKey:      'bills-search-index.json',
+    urlPath:     CORPUS_PREFIX,
+    meta:        state.data.meta,
+    deps:        _deps,
+    onChange:    renderResultsLine,
+    onAfterLoad: () => { if (state.filters.search) applyFilters(); },
+  });
 }
 
 // ── Filter row + handlers ──────────────────────────────────────────────────
