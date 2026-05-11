@@ -575,6 +575,24 @@ function renderDetailsTab(r) {
   `;
 }
 
+// Hindi-content detector. ~30%+ of LS speeches are delivered in Hindi
+// (sometimes mixed with English chair-interjections). We mirror them
+// verbatim — fidelity, not translation — but surface a small nudge so
+// users know the Summary / Ask tabs can produce English via their
+// configured AI. See plan/debates-recon-001.md §"Decisions" + the
+// 2026-05-11 conversation that introduced this.
+function _devanagariRatio(text) {
+  if (!text) return 0;
+  let hindi = 0, latin = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c >= 0x0900 && c <= 0x097F) hindi++;
+    else if ((c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A)) latin++;
+  }
+  const total = hindi + latin;
+  return total === 0 ? 0 : hindi / total;
+}
+
 async function loadTextTab() {
   const r = state.selectedReport;
   const tab = document.getElementById('textTab');
@@ -586,7 +604,23 @@ async function loadTextTab() {
   tab.innerHTML = `<p style="color:var(--muted)">Loading…</p>`;
   const text = await fetchReportText(r);
   if (!text) { tab.innerHTML = `<p>Could not load the extracted text.</p>`; return; }
-  tab.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
+
+  // Surface a hint when the debate is meaningfully Hindi. Single
+  // threshold at 30% — below that the speech is mostly English (with
+  // occasional Hindi quote / phrase, which doesn't need translation
+  // signposting).
+  const hr = _devanagariRatio(text);
+  let hint = '';
+  if (hr >= 0.30) {
+    const label = hr >= 0.70 ? 'delivered primarily in Hindi'
+                              : 'delivered in Hindi and English';
+    hint = `<div class="lang-hint" style="background:var(--info-bg); color:var(--text); padding:10px 14px; border-radius:6px; margin-bottom:12px; font-size:0.86rem; border-left:3px solid var(--navy)">
+      <b>हिन्दी / Hindi:</b> this debate was ${escapeHtml(label)} — preserved here in the original.
+      For an English summary or to ask questions in English, switch to the
+      <b>Summary</b> or <b>Ask</b> tab.
+    </div>`;
+  }
+  tab.innerHTML = hint + `<pre>${escapeHtml(text)}</pre>`;
   renderList();
 }
 
