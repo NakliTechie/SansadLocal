@@ -36,6 +36,7 @@ import {
   expandTokenToDocs,
 } from '../../corpus-search.js';
 import { hydrateFromIDB } from '../../corpus-data.js';
+import { loadTextFromShards } from '../../text-shards.js';
 
 const CORPUS_PREFIX = 'bills/';
 
@@ -266,6 +267,21 @@ async function fetchBillText(bill) {
   const entry = state.data.manifest?.texts?.[bill.compositeId];
   if (!entry) return null;
   const url = entry.url || `text/${bill.compositeId}.txt`;
+
+  // Primary path: bundled text-shards. Bills composite key = compositeId.
+  try {
+    const text = await loadTextFromShards('bills', bill.compositeId, _deps.config.dataBaseUrl);
+    if (text !== null) {
+      state.cache.text[key] = text;
+      idbPut('texts', key, text).catch(() => {});
+      _deps.disk?.write?.('bills', url, text).catch(() => {});
+      return text;
+    }
+  } catch (e) {
+    console.warn('bills: text-shard fetch failed, falling back to legacy URL', e);
+  }
+
+  // Legacy fallback: per-file text/<compositeId>.txt.
   try {
     const res = await fetch(_deps.config.dataBaseUrl + CORPUS_PREFIX + url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

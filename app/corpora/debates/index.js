@@ -34,6 +34,7 @@ import {
   expandTokenToDocs,
 } from '../../corpus-search.js';
 import { hydrateFromIDB } from '../../corpus-data.js';
+import { loadTextFromShards } from '../../text-shards.js';
 
 const CORPUS_PREFIX = 'debates/';
 
@@ -308,13 +309,34 @@ async function fetchReportText(report, version = 'floor') {
   // a flat {size,url}. For RS, manifest.texts.rs[<base_id>] is a dict
   // keyed by version: {floor:{size,url}, english:{...}, part1:{...}}.
   let entry;
+  let compositeKey;
   if (report.house === 'ls') {
-    entry = state.data.manifest?.texts?.ls?.[fileId(report)];
+    const fid = fileId(report);
+    entry = state.data.manifest?.texts?.ls?.[fid];
+    compositeKey = `ls|${fid}`;
   } else if (report.house === 'rs') {
     const base = fileId(report, 'floor').replace(/_floor$/, '');
     entry = state.data.manifest?.texts?.rs?.[base]?.[version];
+    compositeKey = `rs|${base}|${version}`;
   }
   if (!entry) return null;
+
+  // Primary path: bundled text-shards.
+  if (compositeKey) {
+    try {
+      const text = await loadTextFromShards('debates', compositeKey, _deps.config.dataBaseUrl);
+      if (text !== null) {
+        state.cache.text[cacheKey] = text;
+        idbPut('texts', cacheKey, text).catch(() => {});
+        _deps.disk?.write?.('debates', entry.url, text).catch(() => {});
+        return text;
+      }
+    } catch (e) {
+      console.warn('debates: text-shard fetch failed, falling back to legacy URL', e);
+    }
+  }
+
+  // Legacy fallback: per-file text/{ls,rs}/<...>.txt.
   try {
     const res = await fetch(_deps.config.dataBaseUrl + CORPUS_PREFIX + entry.url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

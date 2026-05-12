@@ -27,6 +27,7 @@ import {
   expandTokenToDocs,
 } from '../../corpus-search.js';
 import { hydrateFromIDB } from '../../corpus-data.js';
+import { loadTextFromShards } from '../../text-shards.js';
 
 const CORPUS_PREFIX = 'cag/';
 
@@ -227,6 +228,21 @@ async function fetchReportText(report) {
 
   const entry = state.data.manifest?.texts?.[String(report.id)];
   if (!entry) return null;
+
+  // Primary path: bundled text-shards. CAG composite key = report id.
+  try {
+    const text = await loadTextFromShards('cag', String(report.id), _deps.config.dataBaseUrl);
+    if (text !== null) {
+      state.cache.text[key] = text;
+      idbPut('texts', key, text).catch(() => {});
+      _deps.disk?.write?.('cag', entry.url, text).catch(() => {});
+      return text;
+    }
+  } catch (e) {
+    console.warn('cag: text-shard fetch failed, falling back to legacy URL', e);
+  }
+
+  // Legacy fallback: per-file text/<id>.txt.
   try {
     const res = await fetch(_deps.config.dataBaseUrl + CORPUS_PREFIX + entry.url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

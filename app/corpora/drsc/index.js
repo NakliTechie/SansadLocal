@@ -22,6 +22,7 @@ import {
   expandTokenToDocs,
 } from '../../corpus-search.js';
 import { hydrateFromIDB } from '../../corpus-data.js';
+import { loadTextFromShards } from '../../text-shards.js';
 
 // All corpus data lives under `<dataBaseUrl>/<CORPUS_PREFIX>/...` after
 // v1.0a phase 2. The mirror moved DRSC's files into docs/drsc/ on the
@@ -275,6 +276,26 @@ async function fetchReportText(report) {
   const entry = state.data.manifest?.texts?.[report.committee]?.[mkey];
   if (!entry) return null;
 
+  // Composite key for the bundled text-shards. DRSC's shard build emits
+  // `<committee>|<file_id>` because file_ids repeat across committees.
+  const compositeKey = `${report.committee}|${mkey}`;
+
+  // Primary path: bundled text-shards (post-migration to texts-NN.json).
+  try {
+    const text = await loadTextFromShards('drsc', compositeKey, _deps.config.dataBaseUrl);
+    if (text !== null) {
+      state.cache.text[key] = text;
+      idbPut('texts', key, text).catch(() => {});
+      _deps.disk?.write?.('drsc', entry.url, text).catch(() => {});
+      return text;
+    }
+  } catch (e) {
+    console.warn('drsc: text-shard fetch failed, falling back to legacy URL', e);
+  }
+
+  // Legacy fallback: per-file text/<committee>/<file_id>.txt. Kept so
+  // the app keeps working between the build-helper landing and the
+  // first derive run that produces texts-meta.json + shards.
   try {
     const res = await fetch(_deps.config.dataBaseUrl + CORPUS_PREFIX + entry.url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

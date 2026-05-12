@@ -29,6 +29,7 @@ import {
   expandTokenToDocs,
 } from '../../corpus-search.js';
 import { hydrateFromIDB } from '../../corpus-data.js';
+import { loadTextFromShards } from '../../text-shards.js';
 
 const CORPUS_PREFIX = 'lc/';
 
@@ -277,6 +278,21 @@ async function fetchReportText(report) {
 
   const entry = state.data.manifest?.texts?.[String(report.report_number)];
   if (!entry) return null;
+
+  // Primary path: bundled text-shards. LC composite key = report_number.
+  try {
+    const text = await loadTextFromShards('lc', String(report.report_number), _deps.config.dataBaseUrl);
+    if (text !== null) {
+      state.cache.text[key] = text;
+      idbPut('texts', key, text).catch(() => {});
+      _deps.disk?.write?.('lc', entry.url, text).catch(() => {});
+      return text;
+    }
+  } catch (e) {
+    console.warn('lc: text-shard fetch failed, falling back to legacy URL', e);
+  }
+
+  // Legacy fallback: per-file text/<id>.txt.
   try {
     const res = await fetch(_deps.config.dataBaseUrl + CORPUS_PREFIX + entry.url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
