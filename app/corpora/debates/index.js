@@ -183,6 +183,60 @@ function memberLine(r) {
 
 // ── Data fetching ───────────────────────────────────────────────────────────
 
+// Fetch the debates record metadata, transparently handling both the new
+// sharded shape (reports-meta.json + reports-<house>-<NN>.json) and the
+// legacy single-file shape (reports.json). The sharded shape is required
+// because debates' merged record list crossed Cloudflare's 25 MiB per-file
+// cap during the LS-14..18 walk; the single file can't be deployed anymore.
+// Fallback is retained so the app still works against an older data-repo
+// snapshot during the brief window between app deploy and data-repo deploy.
+//
+// Returns the canonical `{ls: [...], rs: [...]}` shape regardless of source.
+async function fetchReports(dataUrl, v, fetchOpts) {
+  // Prefer sharded format. A 404 here is the cue to fall back; any other
+  // failure (network, JSON parse) is also treated as fall-back-worthy
+  // rather than fatal, so a transient blip on reports-meta doesn't break
+  // the load when reports.json is still around.
+  try {
+    const metaResp = await fetch(dataUrl + CORPUS_PREFIX + 'reports-meta.json' + v, fetchOpts);
+    if (metaResp.ok) {
+      const reportsMeta = await metaResp.json();
+      const shardsByHouse = reportsMeta?.shards || {};
+      const merged = {};
+      const tasks = [];
+      for (const [house, entries] of Object.entries(shardsByHouse)) {
+        merged[house] = [];
+        for (const entry of entries) {
+          tasks.push(
+            fetch(dataUrl + CORPUS_PREFIX + entry.file + v, fetchOpts)
+              .then(r => {
+                if (!r.ok) throw new Error(`${entry.file}: ${r.status}`);
+                return r.json();
+              })
+              .then(payload => ({ house, idx: entry.shard_index ?? 0, records: payload?.records || [] }))
+          );
+        }
+      }
+      const shardResults = await Promise.all(tasks);
+      // Sort defensively by (house, shard_index) so concat order is
+      // deterministic even if shard_index is missing on legacy entries.
+      shardResults.sort((a, b) =>
+        a.house === b.house ? a.idx - b.idx : a.house.localeCompare(b.house));
+      for (const { house, records } of shardResults) {
+        merged[house].push(...records);
+      }
+      return merged;
+    }
+  } catch (e) {
+    console.warn('debates: sharded reports fetch failed, trying legacy reports.json', e);
+  }
+
+  // Legacy single-file fallback.
+  const resp = await fetch(dataUrl + CORPUS_PREFIX + 'reports.json' + v, fetchOpts);
+  if (!resp.ok) throw new Error(`reports.json: ${resp.status}`);
+  return resp.json();
+}
+
 async function fetchData(forceRefresh = false) {
   const splash    = document.getElementById('splash');
   const dataUrl   = _deps.config.dataBaseUrl;
@@ -209,7 +263,7 @@ async function fetchData(forceRefresh = false) {
 
   try {
     const [reports, manifest, meta] = await Promise.all([
-      fetch(dataUrl + CORPUS_PREFIX + 'reports.json'  + v, fetchOpts).then(r => r.ok ? r.json() : Promise.reject(`reports.json: ${r.status}`)),
+      fetchReports(dataUrl, v, fetchOpts),
       fetch(dataUrl + CORPUS_PREFIX + 'manifest.json' + v, fetchOpts).then(r => r.ok ? r.json() : { texts: {} }).catch(() => ({ texts: {} })),
       fetch(dataUrl + CORPUS_PREFIX + 'meta.json'     + v, fetchOpts).then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
