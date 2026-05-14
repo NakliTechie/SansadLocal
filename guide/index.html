@@ -221,12 +221,13 @@ img.shot {
 <p style="margin-bottom: 18px"><a href="../">← Back to SansadSaar</a></p>
 
 <h1>SansadSaar — User guide</h1>
-<p class="lede">A quick tour of every feature, how to set up AI, how the privacy model works, and what costs (if any) come with each option.</p>
+<p class="lede">A tour of the eight corpora SansadSaar surfaces, how to set up AI, how the privacy model works, and what costs (if any) come with each option.</p>
 
 <div class="toc">
   <h3>On this page</h3>
   <ol>
     <li><a href="#overview">What is SansadSaar?</a></li>
+    <li><a href="#corpora">The eight corpora</a></li>
     <li><a href="#interface">The interface at a glance</a></li>
     <li><a href="#browse">Browse, search, filter</a></li>
     <li><a href="#report">Reading a report</a></li>
@@ -243,29 +244,47 @@ img.shot {
 </div>
 
 <h2 id="overview">1. What is SansadSaar?</h2>
-<p>A single-file browser app that surfaces every report from India's 24 Departmentally Related Standing Committees (DRSCs) — 16 chaired by the Lok Sabha, 8 by the Rajya Sabha. Reports are scraped daily from <a href="https://sansad.in" target="_blank" rel="noopener">sansad.in</a> by an open-source GitHub Action and mirrored as static JSON on GitHub Pages. The app you're using runs entirely in your browser — there is no SansadSaar server, no account, no analytics.</p>
-<p>Three things make it different from the upstream <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank" rel="noopener">ParliamentWatch</a> (whose Python scraper powers the data mirror):</p>
+<p>A single-file browser app that opens up eight corpora of India's parliamentary and executive record — searchable, filterable, and (optionally) AI-readable in the same UI. Each corpus is scraped on its own schedule by an open-source GitHub Action and mirrored as static JSON on Cloudflare Workers. The app you're using runs entirely in your browser — there is no SansadSaar server, no account, no analytics.</p>
+<p>Three things make it different from the upstream <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank" rel="noopener">ParliamentWatch</a> (whose Python scraper foundation powers the oversight corpora):</p>
 <ul>
   <li>It runs as a single HTML file — no Python, no install, no terminal.</li>
   <li>AI summaries and Q&amp;A can run on your device (Gemma / Ternary Bonsai over WebGPU) — no API key required.</li>
   <li>If you want a stronger model, you can plug in your own API key (Anthropic, OpenAI, Gemini, Groq, OpenRouter, Ollama, or any OpenAI-compatible endpoint).</li>
 </ul>
 
-<h2 id="interface">2. The interface at a glance</h2>
-<img class="shot" src="img/01-overview.jpg" alt="SansadSaar main view: header with brand, stats, AI pill, settings, help; filter row; toolbar with batch summarise + export; report list with status badges">
-<p class="caption">Main view — top header, filters, toolbar, sortable report list.</p>
+<h2 id="corpora">2. The eight corpora</h2>
+<p>The corpus chip strip near the top groups the eight datasets into four thematic buckets. Click any chip to switch the list and filter row to that corpus.</p>
+<table>
+  <thead><tr><th>Group</th><th>Corpus</th><th>What's in it</th></tr></thead>
+  <tbody>
+    <tr><td rowspan="3"><b>Oversight</b></td><td>DRSC</td><td>Reports from India's 24 Departmentally Related Standing Committees — 16 chaired by the Lok Sabha, 8 by the Rajya Sabha. The original SansadSaar corpus.</td></tr>
+    <tr><td>CAG</td><td>Audit reports published by the Comptroller &amp; Auditor General of India.</td></tr>
+    <tr><td>FC</td><td>Financial Committee reports — Public Accounts, Estimates, and Public Undertakings Committees.</td></tr>
+    <tr><td rowspan="2"><b>Legislation</b></td><td>Bills</td><td>Bills introduced or pending in Parliament, sourced from PRS Legislative Research.</td></tr>
+    <tr><td>LC</td><td>Law Commission of India reports — primary recommendations on legal reform.</td></tr>
+    <tr><td rowspan="2"><b>Proceedings</b></td><td>Debates</td><td>Lok Sabha and Rajya Sabha debate reports — full text where the upstream provides it.</td></tr>
+    <tr><td>Questions</td><td>Starred and unstarred parliamentary questions from both houses.</td></tr>
+    <tr><td><b>Executive</b></td><td>Gazettes</td><td>Central Gazette of India (Weekly + Extraordinary), pulled from the <a href="https://archive.org/details/gazetteofindia" target="_blank" rel="noopener">archive.org gazetteofindia collection</a> with its bilingual OCR.</td></tr>
+  </tbody>
+</table>
+<p>Header counts (<em>X reports · Y with text</em>) re-bind to whichever chip is active. The chip pill on the right (<em>"DRSC: updated 4 hours ago"</em>) shows how fresh the mirror data is for that corpus.</p>
+<div class="callout">Not every feature is available for every corpus. Full text extraction is rolling out by corpus — some have it (DRSC, CAG, FC, LC, Bills), some are metadata-only today (Questions). Filters, AI summary, and Ask only work when the report has text; the row badge tells you which state it's in.</div>
+
+<h2 id="interface">3. The interface at a glance</h2>
+<img class="shot" src="img/01-overview.jpg" alt="SansadSaar main view: header with brand, header stats, AI pill, settings, help; corpus chip strip with all eight chips; filter row; report list with status badges">
+<p class="caption">Main view — top header, corpus chip strip, filters, sortable report list.</p>
 <p>The header runs across the top:</p>
 <div class="mock-header">
   <span class="brand">SansadSaar</span>
   <span class="tag">India's parliamentary record</span>
   <span class="spacer"></span>
-  <span style="font-size:0.78rem; color:var(--muted)"><b>2671</b> reports · <b>24</b> committees · <b>72</b> with text</span>
+  <span style="font-size:0.78rem; color:var(--muted)"><b>14707</b> reports · <b>24</b> committees · <b>11369</b> with text</span>
   <span class="mock-pill"><span class="dot"></span>AI off</span>
   <span class="mock-icon-btn">⚙</span>
   <span class="mock-icon-btn">?</span>
 </div>
 <ul>
-  <li><b>Stats</b> tell you how many reports the mirror has, how many committees, and how many have full extracted text yet.</li>
+  <li><b>Header stats</b> reflect the <em>active</em> corpus. Click a different chip and the numbers rebind to that corpus.</li>
   <li><b>AI status pill</b> tells you what AI is configured. Click it to jump to Settings.
     <ul>
       <li><span class="mock-pill"><span class="dot"></span>AI off</span> — nothing configured yet</li>
@@ -274,32 +293,37 @@ img.shot {
       <li><span class="mock-pill api"><span class="dot"></span>BYOK: Anthropic</span> — your API key configured</li>
     </ul>
   </li>
-  <li><b>Settings</b> (<span class="kbd">⚙</span>) — pick the AI mode, load a model, configure web search.</li>
+  <li><b>Settings</b> (<span class="kbd">⚙</span>) — pick the AI mode, load a model, configure web search, manage per-corpus deep-search toggles.</li>
   <li><b>Help</b> (<span class="kbd">?</span>) — what you're reading is the long-form version of that modal.</li>
 </ul>
+<p>Below the header is the <b>corpus chip strip</b>: eight chips grouped under four labels (<em>oversight, legislation, proceedings, executive</em>). The active chip is highlighted; everything below it — filter row, list, status badge — belongs to that corpus.</p>
 
-<h2 id="browse">3. Browse, search, filter</h2>
-<p>Below the header, a row of filters narrows the list:</p>
-<ol>
-  <li><b>Search</b> — substring match against titles by default. Open any report's <b>Full text</b> tab and that text becomes searchable too. To pre-fetch every extracted PDF and search across the entire corpus body content, enable <b>Deep search</b> in <b>Settings</b> (~25–500 MB download depending on backfill state — uses local cache after).</li>
-  <li><b>All committees</b> — narrow to one of the 24 DRSCs.</li>
-  <li><b>All Lok Sabhas</b> — most data is currently from LS18; older terms backfill over time.</li>
-  <li><b>All categories</b> — auto-tagged from titles:
-    <span class="mock-cat cat-DFG">DFG</span> Demand for Grants ·
-    <span class="mock-cat cat-AT">AT</span> Action Taken ·
-    <span class="mock-cat cat-SUBJ">SUBJ</span> Subject reports
-    (BILL and ASSURE also exist).
-  </li>
-  <li><b>Sort</b> — newest first by default.</li>
-</ol>
+<h2 id="browse">4. Browse, search, filter</h2>
+<p>The filter row is corpus-aware — each corpus emits the filters that make sense for it. The shapes you'll see:</p>
+<table>
+  <thead><tr><th>Corpus</th><th>Filters it shows</th></tr></thead>
+  <tbody>
+    <tr><td>DRSC</td><td>Search · committee (24 options) · Lok Sabha term · category (DFG, AT, SUBJ, BILL, ASSURE) · sort</td></tr>
+    <tr><td>CAG</td><td>Search · ministry · sector · year · sort</td></tr>
+    <tr><td>FC</td><td>Search · committee (PAC / Estimates / PUC) · Lok Sabha term · category · sort</td></tr>
+    <tr><td>Bills</td><td>Search · house · status · year · sort</td></tr>
+    <tr><td>LC</td><td>Search · year · sort</td></tr>
+    <tr><td>Debates</td><td>Search · house (LS / RS) · session · sort</td></tr>
+    <tr><td>Questions</td><td>Search · house · session · sort</td></tr>
+    <tr><td>Gazettes</td><td>Search · category (Extraordinary / Weekly) · ministry · language (EN / HI / EN+HI) · year · sort</td></tr>
+  </tbody>
+</table>
+<p>The <b>Search</b> box does substring match against titles by default. Open any report's <b>Full text</b> tab and that text becomes searchable too. To pre-fetch every extracted text for a corpus and search across its full body content, toggle <b>Enable full-text search across &lt;corpus&gt;</b> in <b>Settings</b> (size estimate shown — uses local cache after first fetch).</p>
 <p>Each row also carries a status badge on the right:</p>
 <ul>
   <li><span class="mock-pill" style="font-size:0.7rem; padding:2px 7px">metadata</span> — only metadata is published; no extracted text yet.</li>
   <li><span class="mock-pill ready" style="font-size:0.7rem; padding:2px 7px">text</span> — full text has been extracted by the mirror and is searchable.</li>
   <li><span class="mock-pill api" style="font-size:0.7rem; padding:2px 7px">summary</span> — you've generated an AI summary that's cached in your browser.</li>
 </ul>
+<p>Gazettes additionally carry an <b>EN+HI</b> badge when both English and Hindi text exist in the same record (the archive.org OCR is bilingual).</p>
+<div class="callout tip"><b>Cross-corpus search.</b> Press <span class="kbd">⌘K</span> / <span class="kbd">Ctrl+K</span> for the global search palette — it queries every loaded corpus at once and links straight to the matching report.</div>
 
-<h2 id="report">4. Reading a report</h2>
+<h2 id="report">5. Reading a report</h2>
 <img class="shot" src="img/05-report-details.jpg" alt="Report dialog open on a Standing Committee on Coal, Mines and Steel report, Details tab showing committee, report no., dates, PDF links">
 <p class="caption">Report dialog — Details tab. PDF links go straight to sansad.in.</p>
 <p>Click any row to open a four-tab dialog:</p>
@@ -317,7 +341,7 @@ img.shot {
 </ul>
 <div class="callout">If a report shows <em>"Full text has not yet been extracted"</em>, it means the mirror's daily action hasn't gotten to it yet. Open the PDF directly via the Details tab in the meantime.</div>
 
-<h2 id="ai-setup">5. Setting up AI</h2>
+<h2 id="ai-setup">6. Setting up AI</h2>
 <p>Click the <span class="kbd">⚙</span> Settings icon in the header (or the AI status pill). Pick one of two modes:</p>
 
 <img class="shot" src="img/02-settings-local.jpg" alt="Settings modal: AI mode = Local AI (WebGPU, Gemma); Local AI section with Model dropdown, Status pill, Load + Clear cache buttons">
@@ -354,7 +378,7 @@ img.shot {
   <li>Click <b>Save</b>. The pill turns to <em>"BYOK: &lt;Provider&gt;"</em>.</li>
 </ol>
 
-<h2 id="summary">6. Generating an AI summary</h2>
+<h2 id="summary">7. Generating an AI summary</h2>
 <img class="shot" src="img/06-report-summary.jpg" alt="Report dialog AI summary tab with a generated summary about a Standing Committee report on AI in Electronics & IT">
 <p class="caption">AI summary tab — a freshly-generated 4-section briefing.</p>
 <ol class="flow">
@@ -366,7 +390,7 @@ img.shot {
 </ol>
 <div class="callout tip">Switching tabs while a summary is streaming — say to peek at the Full text — won't lose progress. Switch back and the latest token count is what you'll see.</div>
 
-<h2 id="ask">7. Asking questions about a report</h2>
+<h2 id="ask">8. Asking questions about a report</h2>
 <img class="shot" src="img/07-report-ask.jpg" alt="Report dialog Ask tab with system message and a chat input with Send button">
 <p class="caption">Ask tab — chat input scoped to the open report.</p>
 <ol class="flow">
@@ -377,7 +401,7 @@ img.shot {
 </ol>
 <div class="callout">Ask uses any cached AI summary as additional context, so generating a summary first sometimes produces sharper answers — especially for "what does this report recommend?" style questions.</div>
 
-<h2 id="search-enrich">8. Web-search enrichment for Ask</h2>
+<h2 id="search-enrich">9. Web-search enrichment for Ask</h2>
 <img class="shot" src="img/04-settings-search.jpg" alt="Settings modal Web search section with Provider = Tavily, API key field, Save button">
 <p class="caption">Settings → Web search section.</p>
 <p>Optional. When configured, you get a <span class="kbd">🌐</span> button next to <b>Send</b> in the Ask tab. Clicking it does a web search first and feeds the top results into the prompt alongside the report text. Useful for "is there recent news on this?" or "has the government acted on this since the report?" style follow-ups.</p>
@@ -395,7 +419,7 @@ img.shot {
   <li>Save. The 🌐 button appears in the Ask tab.</li>
 </ol>
 
-<h2 id="export">9. Exporting metadata and summaries</h2>
+<h2 id="export">10. Exporting metadata and summaries</h2>
 <p>Two buttons live in the toolbar above the report list:</p>
 <ul>
   <li><b>⬇ Metadata (CSV)</b> — exports the <em>currently filtered</em> reports as CSV. 13 columns including <code>has_text</code> and <code>has_summary</code>. Useful for dropping into Excel / a notebook for analysis.</li>
@@ -403,17 +427,17 @@ img.shot {
 </ul>
 <p>Both downloads happen client-side — nothing leaves your machine.</p>
 
-<h2 id="deep-search">10. Deep search (optional)</h2>
-<p>By default, search hits report titles. The instant you open a report's <b>Full text</b> tab, that body becomes searchable too — and stays cached locally forever. If you want to search across the entire corpus' body content without opening reports one-by-one, enable <b>Deep search</b> in Settings.</p>
+<h2 id="deep-search">11. Deep search (optional)</h2>
+<p>By default, search hits report titles. The instant you open a report's <b>Full text</b> tab, that body becomes searchable too — and stays cached locally forever. If you want to search across the entire corpus' body content without opening reports one-by-one, enable <b>Deep search</b> in Settings — independently per corpus.</p>
 <ol class="flow">
-  <li>Open Settings → <b>Search</b> section.</li>
-  <li>Tick <em>"Enable full-text search across all extracted reports"</em>. The estimate line tells you how much will download.</li>
-  <li>Save. The app starts fetching every extracted text in the background (4 concurrent, throttled). Status appears above the report list as <em>"Indexing N/M…"</em>.</li>
-  <li>Once done, search now hits body content for the entire corpus. Cached locally — return visits use zero new bandwidth.</li>
+  <li>Open Settings → scroll to the per-corpus search section for the corpus you want to deep-search.</li>
+  <li>Tick <em>"Enable full-text search across &lt;corpus&gt;"</em>. The estimate line tells you how much will download.</li>
+  <li>Save. The app starts fetching every extracted text in the background (throttled). A small status appears below the filter row while it indexes.</li>
+  <li>Once done, search hits body content for that corpus's full backfill. Cached locally — return visits use zero new bandwidth for it.</li>
 </ol>
-<div class="callout">Why opt-in? At full backfill (~14,000 reports) this would pull ~500 MB of text. Default-on would be unkind to first-time visitors on mobile and to GitHub Pages bandwidth. The opt-in flow is the polite default; power users get the same capability with one click.</div>
+<div class="callout">Why opt-in per corpus? A fully-extracted corpus can be a few hundred MB of text. Default-on across all eight would be unkind to first-time visitors on mobile and to the data mirror's bandwidth. The opt-in flow is the polite default; you flip on only the corpora you actually want to deep-search.</div>
 
-<h2 id="privacy">11. Privacy &amp; what's cached locally</h2>
+<h2 id="privacy">12. Privacy &amp; what's cached locally</h2>
 <p>SansadSaar has no server. Everything you generate stays in your browser:</p>
 <ul>
   <li><b>API keys</b> — <code>localStorage</code>, never sent except to the provider you chose.</li>
@@ -424,24 +448,32 @@ img.shot {
 </ul>
 <p>What leaves your browser:</p>
 <ul>
-  <li>Fetches to <code>sansadsaar-data.naklitechie.com</code> — the static data mirror, served from Cloudflare's edge. No tracking, no analytics.</li>
+  <li>Fetches to the data-mirror origins, all served as static assets from Cloudflare Workers:
+    <ul>
+      <li><code>sansadsaar-data.naklitechie.com</code> — DRSC, CAG, FC, LC, Bills (the document-corpus mirror)</li>
+      <li><code>sansadsaar-proceedings.naklitechie.com</code> — Debates + Questions</li>
+      <li><code>sansadsaar-gazettes.naklitechie.com</code> — Central Gazette</li>
+    </ul>
+    No tracking, no analytics.
+  </li>
+  <li>Click-through to <code>archive.org</code> when you open a Gazette's "View PDF" — that's a normal external link, the app doesn't proxy.</li>
   <li>Fetches to <code>huggingface.co</code> — model weights, only on first load of a given model.</li>
   <li>BYOK requests go directly to your chosen provider. Your key isn't proxied anywhere.</li>
   <li>Search-enrichment requests go directly to your chosen search provider.</li>
 </ul>
-<p>What never happens: no analytics, no accounts, no telemetry, no server logs (no server). The page is a static <code>index.html</code> served from GitHub Pages, fronted by Cloudflare for the custom domain.</p>
+<p>What never happens: no analytics, no accounts, no telemetry, no server logs (no server). The page is a static <code>index.html</code> served from Cloudflare Workers, on the custom domain.</p>
 
-<h2 id="costs">12. Costs &amp; limits — what's free, what isn't</h2>
+<h2 id="costs">13. Costs &amp; limits — what's free, what isn't</h2>
 <p>Three layers of cost. The first is always free; the other two depend on your choice.</p>
 
 <h3>Layer 1 — SansadSaar infrastructure</h3>
 <table>
   <thead><tr><th>Component</th><th>Cost</th><th>Notes</th></tr></thead>
   <tbody>
-    <tr><td>The app itself</td><td>Free</td><td>Static HTML on GitHub Pages.</td></tr>
-    <tr><td>Daily data scrape</td><td>Free</td><td>GitHub Actions free tier (public repos = unlimited minutes).</td></tr>
-    <tr><td>Data hosting</td><td>Free</td><td>GitHub Pages, 100 GB/month soft limit. Current data &lt;500 MB.</td></tr>
-    <tr><td>Custom domain (Cloudflare)</td><td>Free</td><td>Cloudflare DNS + Pages, free tier.</td></tr>
+    <tr><td>The app itself</td><td>Free</td><td>Single static <code>index.html</code>, served via Cloudflare Workers Static Assets.</td></tr>
+    <tr><td>Scheduled scrapers</td><td>Free</td><td>GitHub Actions free tier. Eight corpora, eight crons — hourly to daily depending on upstream cadence.</td></tr>
+    <tr><td>Data hosting</td><td>Free</td><td>Three CF Workers Static Assets deployments (document-corpus + proceedings + gazettes). Under CF's free-tier file-count and bandwidth limits.</td></tr>
+    <tr><td>Custom domain (Cloudflare)</td><td>Free</td><td>Cloudflare DNS + Workers, free tier.</td></tr>
   </tbody>
 </table>
 
@@ -507,7 +539,7 @@ img.shot {
 
 <div class="callout tip"><b>Recommended free path for most people.</b> Local AI = Gemma 4 E2B (or Ternary Bonsai 1.7B if low on bandwidth) + Tavily for search enrichment. You'll never see a bill.</div>
 
-<h2 id="troubleshooting">13. Troubleshooting</h2>
+<h2 id="troubleshooting">14. Troubleshooting</h2>
 <h3>The local model won't load</h3>
 <ul>
   <li>Check the AI status pill — if it says <em>"No WebGPU"</em>, the browser doesn't support WebGPU. Use Chrome 113+, Edge 113+, Brave, or Firefox 130+.</li>
@@ -526,12 +558,12 @@ img.shot {
 <p>If you opened the app via <code>http://localhost:8000</code> for local dev, set <code>OLLAMA_ORIGINS=http://localhost:8000</code> instead.</p>
 
 <h3>The mirror is missing data</h3>
-<p>The daily action runs at 04:30 UTC (10:00 IST). If a new report shows up on sansad.in mid-day, it'll appear in SansadSaar the next morning. Settings → <b>Refresh from mirror</b> force-fetches; on a fresh visit the latest data loads automatically.</p>
+<p>Each corpus has its own GitHub Action on its own schedule — DRSC daily, CAG / FC / LC / Bills daily, Debates 2-hourly, Questions hourly, Gazettes hourly. A new upstream record typically appears in SansadSaar within that corpus's next cycle. On a fresh visit, the latest data loads automatically; if you've linked Save-to-Disk, the staleness check picks up updates and re-syncs in the background.</p>
 
 <h3>Where do credits live?</h3>
-<img class="shot" src="img/08-help-credits.jpg" alt="Help modal Credits tab showing Built on top of ParliamentWatch, open-source pieces (Transformers.js, Gemma 4 ONNX, pypdf, GitHub Pages), built by Chirag Patnaik, source links">
+<img class="shot" src="img/08-help-credits.jpg" alt="Help modal Credits tab showing Built on top of ParliamentWatch, Gazettes corpus inspired by egazette, open-source pieces, built by Chirag Patnaik, source links">
 <p class="caption">Help → Credits tab. Open from the <span class="kbd">?</span> button in the header.</p>
-<p>Built on top of <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank">ParliamentWatch</a> by Pranay Kotasthane — the scraper, committee config, and original idea are his. SansadSaar repackages it with on-device AI. Full credit list in the Help → Credits tab.</p>
+<p>Built on top of <a href="https://github.com/pranaykotas/parliamentwatch" target="_blank">ParliamentWatch</a> by Pranay Kotasthane — the original DRSC scraper, committee config, and core idea are his. The Gazettes corpus shape is inspired by <a href="https://github.com/sushant354/egazette" target="_blank">egazette</a> by <a href="https://x.com/sushantsinha" target="_blank">Sushant Sinha</a> (independently implemented; no code copied). SansadSaar repackages all of this with on-device AI and the additional corpora. Full credit list in the Help → Credits tab.</p>
 
 <div class="footer-back">
   <a href="../">← Back to SansadSaar</a> ·

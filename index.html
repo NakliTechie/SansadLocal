@@ -1365,25 +1365,27 @@ body.stats-expanded .corpus-status-caret { transform: rotate(180deg); }
       <div class="tab-pane active" id="hAbout">
         <p style="background:var(--accent-bg); border:1px solid var(--accent); border-radius:6px; padding:10px 14px; margin-bottom:14px; font-weight:500;">📘 New here? <a href="guide/" target="_blank" rel="noopener" style="font-weight:700;">Open the full user guide →</a> — covers AI setup, BYOK costs/limits, web search enrichment, privacy details.</p>
         <h3>What is SansadSaar?</h3>
-        <p>A single-file browser app to browse, search, and summarise reports from India's 24 Departmentally Related Standing Committees (DRSCs) — 16 chaired by Lok Sabha, 8 by Rajya Sabha. The reports are scraped daily from <a href="https://sansad.in" target="_blank" rel="noopener">sansad.in</a> and mirrored as static JSON/text on GitHub Pages so this page can read them with no server, no auth, no API key.</p>
-        <h3>Why committee reports matter</h3>
-        <p>DRSCs are the most robust institutional mechanism through which Indian Parliament scrutinises the executive. Their reports — on demands for grants, bills, and policy subjects — are evidence-based and non-partisan. They're also poorly indexed and rarely read.</p>
+        <p>A single-file browser app for India's parliamentary and executive record — eight searchable corpora across four groups:</p>
+        <ul style="margin: 6px 0 12px 22px;">
+          <li><b>Oversight</b> — DRSC (Standing Committees), CAG (Audit Reports), FC (Financial Committees)</li>
+          <li><b>Legislation</b> — Bills, LC (Law Commission)</li>
+          <li><b>Proceedings</b> — Debates, Questions</li>
+          <li><b>Executive</b> — Gazettes (Central Gazette)</li>
+        </ul>
+        <p>Each corpus is scraped on its own GitHub Actions cron and served as static JSON from Cloudflare Workers — no server, no auth, no API key.</p>
         <h3>Where AI fits</h3>
         <p>Open any report and you get four tabs: <b>Details</b> (metadata + PDF links), <b>Full text</b> (when extracted), <b>AI summary</b> (one click → plain-English briefing), and <b>Ask</b> (chat with the report). AI runs on your device by default — open <b>Settings</b> (the gear icon, top right) to load a model or set a BYOK key. Full walkthrough in the <a href="guide/" target="_blank" rel="noopener"><b>user guide</b></a>.</p>
       </div>
       <div class="tab-pane" id="hBrowse">
+        <h3>Switching corpora</h3>
+        <p>The corpus chip strip near the top groups the eight datasets under four labels (<em>oversight, legislation, proceedings, executive</em>). Click any chip to switch the list, header stats, and filter row to that corpus. Press <span style="display:inline-block; padding:1px 5px; border:1px solid var(--border); border-radius:3px; font-size:0.8em; background:var(--surface)">⌘K</span> for the cross-corpus search palette.</p>
         <h3>Filtering</h3>
-        <ul>
-          <li><b>Search</b> — substring match against title + extracted full text (when available)</li>
-          <li><b>Committee</b> — narrow to one of 24 DRSCs</li>
-          <li><b>Lok Sabha</b> — current is LS18; older terms appear as the mirror back-fills them</li>
-          <li><b>Category</b> — auto-tagged from the title: <span class="cat-badge cat-DFG">DFG</span> Demand for Grants, <span class="cat-badge cat-AT">AT</span> Action Taken, <span class="cat-badge cat-BILL">BILL</span> Bills, <span class="cat-badge cat-ASSURE">ASSURE</span> Assurances, <span class="cat-badge cat-SUBJ">SUBJ</span> Subjects</li>
-        </ul>
+        <p>The filter row is corpus-aware — DRSC offers committee + Lok Sabha + category; CAG offers ministry + sector + year; Gazettes offers category + ministry + language; and so on. <b>Search</b> always works as substring match against titles by default; enable <em>full-text search</em> for a corpus in Settings to pre-fetch its body content and search inside.</p>
         <h3>Status badges</h3>
         <ul>
           <li><span class="text-status ok">text</span> — full text has been extracted from the PDF and is searchable</li>
           <li><span class="text-status summary">summary</span> — you've generated an AI summary and it's cached</li>
-          <li><span class="house-pill house-L">LS</span> Lok Sabha-chaired · <span class="house-pill house-R">RS</span> Rajya Sabha-chaired</li>
+          <li><span class="house-pill house-L">LS</span> Lok Sabha-chaired · <span class="house-pill house-R">RS</span> Rajya Sabha-chaired (for DRSC / FC)</li>
         </ul>
       </div>
       <div class="tab-pane" id="hAI">
@@ -1408,7 +1410,13 @@ body.stats-expanded .corpus-status-caret { transform: rotate(180deg); }
         </ul>
         <h3>What leaves your browser</h3>
         <ul>
-          <li>Fetches to <code>sansadsaar-data.naklitechie.com</code> — static JSON + text files served from Cloudflare's edge. No tracking.</li>
+          <li>Fetches to the three data-mirror origins, all static assets on Cloudflare Workers — no tracking:
+            <ul>
+              <li><code>sansadsaar-data.naklitechie.com</code> (DRSC, CAG, FC, LC, Bills)</li>
+              <li><code>sansadsaar-proceedings.naklitechie.com</code> (Debates + Questions)</li>
+              <li><code>sansadsaar-gazettes.naklitechie.com</code> (Central Gazette)</li>
+            </ul>
+          </li>
           <li>Fetches to <code>huggingface.co</code> — model weights, only on first Gemma load.</li>
           <li>If you use BYOK: requests directly to your provider. Your key isn't proxied through any other server.</li>
         </ul>
