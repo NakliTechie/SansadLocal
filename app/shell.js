@@ -53,13 +53,14 @@ const DATA_BASE_URL = (() => {
 // domains are wired up. The default `?data=...` URL override only
 // affects the main DATA_BASE_URL; corpora listed here ignore it.
 const CORPUS_DATA_BASE_URLS = {
-  // Gazettes: sansadsaar-gazettes repo (private). Pages.dev default
-  // until a custom subdomain (gazettes.sansadsaar-data.naklitechie.com)
-  // is set up in Cloudflare.
-  gazettes:  'https://sansadsaar-gazettes.pages.dev/',
-  // Debates + Questions: sansadsaar-proceedings-data repo (private).
-  debates:   'https://sansadsaar-proceedings-data.pages.dev/',
-  questions: 'https://sansadsaar-proceedings-data.pages.dev/',
+  // Gazettes: sansadsaar-gazettes repo (private), served via CF Worker
+  // Static Assets at sansadsaar-gazettes.naklitechie.com.
+  gazettes:  'https://sansadsaar-gazettes.naklitechie.com/',
+  // Debates + Questions: sansadsaar-proceedings-data repo (private),
+  // both corpora served from one Worker at sansadsaar-proceedings.naklitechie.com.
+  // Update this when the custom domain is wired.
+  debates:   'https://sansadsaar-proceedings.naklitechie.com/',
+  questions: 'https://sansadsaar-proceedings.naklitechie.com/',
 };
 
 // Local-AI model registry. Multimodal uses AutoProcessor +
