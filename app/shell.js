@@ -21,6 +21,7 @@ import { BillsCorpus }   from './corpora/bills/index.js';
 import { LCCorpus }      from './corpora/lc/index.js';
 import { FCCorpus }      from './corpora/fc/index.js';
 import { DebatesCorpus } from './corpora/debates/index.js';
+import { QuestionsCorpus } from './corpora/questions/index.js';
 import {
   initDiskSync, getDiskSyncState, onDiskSyncChange,
   connectAndSync, reconnect, syncNow,
@@ -1210,6 +1211,7 @@ async function init() {
   corpora.set(LCCorpus.id,      LCCorpus);
   corpora.set(FCCorpus.id,      FCCorpus);
   corpora.set(DebatesCorpus.id, DebatesCorpus);
+  corpora.set(QuestionsCorpus.id, QuestionsCorpus);
 
   attachShellHandlers();
   wireMobileChrome();
