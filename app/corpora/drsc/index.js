@@ -1181,11 +1181,12 @@ function renderSettingsSection(container) {
     <div class="settings-section">
       <h3>Data (Standing Committees)</h3>
       <p id="dataInfo">${meta
-        ? `Last updated ${escapeHtml(meta.generated_at)} · ${escapeHtml(String(meta.total_reports))} reports total · text limit ${escapeHtml(String(meta.text_limit_per_committee || '?'))} per committee`
+        ? `${_deps.ui.stalenessIndicatorHTML('drsc', meta)} · ${escapeHtml(String(meta.total_reports))} reports total · text limit ${escapeHtml(String(meta.text_limit_per_committee || '?'))} per committee`
         : `Source: ${escapeHtml(_deps.config.dataBaseUrl)}`}</p>
       <button class="sm" id="refreshDataBtn">Refresh from mirror</button>
     </div>
   `;
+  _deps.ui.bindStalenessIndicators(container);
 
   document.getElementById('refreshDataBtn').addEventListener('click', async () => {
     _deps.ui.toast('Refreshing…');

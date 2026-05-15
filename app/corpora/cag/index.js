@@ -1125,11 +1125,12 @@ function renderSettingsSection(container) {
     <div class="settings-section">
       <h3>Data (CAG audits)</h3>
       <p id="cagDataInfo">${meta
-        ? `Last updated ${escapeHtml(meta.generated_at)} · ${escapeHtml(String(meta.total_reports))} reports total · ${escapeHtml(String(meta.total_with_text))} with text`
+        ? `${_deps.ui.stalenessIndicatorHTML('cag', meta)} · ${escapeHtml(String(meta.total_reports))} reports total · ${escapeHtml(String(meta.total_with_text))} with text`
         : `Source: ${escapeHtml(_deps?.config?.dataBaseUrl || '')}cag/`}</p>
       <button class="sm" id="cagRefreshDataBtn">Refresh from mirror</button>
     </div>
   `;
+  _deps.ui.bindStalenessIndicators(container);
 
   document.getElementById('cagRefreshDataBtn').addEventListener('click', async () => {
     _deps.ui.toast('Refreshing CAG…');

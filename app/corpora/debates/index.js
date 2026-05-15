@@ -1312,11 +1312,12 @@ function renderSettingsSection(container) {
     <div class="settings-section">
       <h3>Data (Debates)</h3>
       <p id="debatesDataInfo">${meta
-        ? `Last updated ${escapeHtml(meta.generated_at)} · ${escapeHtml(String(meta.total_records))} records total · ${escapeHtml(String(meta.total_with_text))} with text · LSes ${escapeHtml((meta.lok_sabhas || []).join(', '))}`
+        ? `${_deps.ui.stalenessIndicatorHTML('debates', meta)} · ${escapeHtml(String(meta.total_records))} records total · ${escapeHtml(String(meta.total_with_text))} with text · LSes ${escapeHtml((meta.lok_sabhas || []).join(', '))}`
         : `Source: ${escapeHtml(_deps?.config?.dataBaseUrl || '')}debates/`}</p>
       <button class="sm" id="debatesRefreshDataBtn">Refresh from mirror</button>
     </div>
   `;
+  _deps.ui.bindStalenessIndicators(container);
 
   document.getElementById('debatesRefreshDataBtn').addEventListener('click', async () => {
     _deps.ui.toast('Refreshing debates…');

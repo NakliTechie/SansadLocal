@@ -1161,11 +1161,12 @@ function renderSettingsSection(container) {
     <div class="settings-section">
       <h3>Data (Law Commission)</h3>
       <p id="lcDataInfo">${meta
-        ? `Last updated ${escapeHtml(meta.generated_at)} · ${escapeHtml(String(meta.total_reports))} reports total · ${escapeHtml(String(meta.total_with_text))} with text`
+        ? `${_deps.ui.stalenessIndicatorHTML('lc', meta)} · ${escapeHtml(String(meta.total_reports))} reports total · ${escapeHtml(String(meta.total_with_text))} with text`
         : `Source: ${escapeHtml(_deps?.config?.dataBaseUrl || '')}lc/`}</p>
       <button class="sm" id="lcRefreshDataBtn">Refresh from mirror</button>
     </div>
   `;
+  _deps.ui.bindStalenessIndicators(container);
 
   document.getElementById('lcRefreshDataBtn').addEventListener('click', async () => {
     _deps.ui.toast('Refreshing LC…');

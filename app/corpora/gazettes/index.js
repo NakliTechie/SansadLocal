@@ -1154,11 +1154,12 @@ function renderSettingsSection(container) {
     <div class="settings-section">
       <h3>Data (Central Gazette)</h3>
       <p id="gazettesDataInfo">${meta
-        ? `Last updated ${escapeHtml(meta.generated_at)} · ${escapeHtml(String((meta.totals && meta.totals.central) || 0))} notifications total`
+        ? `${_deps.ui.stalenessIndicatorHTML('gazettes', meta)} · ${escapeHtml(String((meta.totals && meta.totals.central) || 0))} notifications total`
         : `Source: ${escapeHtml(_deps?.config?.dataBaseUrl || '')}gazettes/`}</p>
       <button class="sm" id="gazettesRefreshDataBtn">Refresh from mirror</button>
     </div>
   `;
+  _deps.ui.bindStalenessIndicators(container);
 
   document.getElementById('gazettesRefreshDataBtn').addEventListener('click', async () => {
     _deps.ui.toast('Refreshing Gazettes…');
