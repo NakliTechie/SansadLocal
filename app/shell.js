@@ -63,22 +63,29 @@ const CORPUS_DATA_BASE_URLS = {
   questions: 'https://sansadsaar-proceedings.naklitechie.com/',
 };
 
-// Per-corpus expected scrape cadence in minutes. Used by the staleness
-// indicator in the settings modal. The derive workflow's
-// meta.generated_at updates only when new primary data produces a
-// different derive output, so the cadence we audit against is the
-// SCRAPE cadence — not the derive cadence. See CONV.md "Multi-corpus
-// derive in one repo" → "Audit by meta.generated_at, not workflow run
-// history".
+// Per-corpus expected interval between data updates visible on the
+// live mirror, in minutes. Used by the staleness indicator in the
+// settings modal.
+//
+// This is the SCRAPE cadence + the CF-DEPLOY-SYNC cadence, because
+// scrape commits sit on `main` until the cf-sync workflow promotes
+// them to `cf-deploy` and CF rebuilds. The sync runs every 4 hours
+// (cf-sync.yml in each data repo), so even an hourly-scraped corpus
+// will only show new data on the mirror at most every ~4h. See
+// CONV.md "Multi-corpus derive in one repo" → "Audit by
+// meta.generated_at, not workflow run history" for the deeper
+// rationale.
+//
+// Effective cadence = scrape_cadence + 240 (sync lag).
 const CORPUS_CADENCE_MINUTES = {
-  drsc:      240,  // 4-hourly scrape.yml
-  cag:        60,  // hourly cag-backfill.yml
-  fc:        240,  // 4-hourly fc.yml
-  bills:     240,  // 4-hourly bills-backfill.yml
-  lc:        240,  // 4-hourly lc.yml
-  debates:   120,  // 2-hourly debates.yml
-  questions:  60,  // hourly questions.yml
-  gazettes:   60,  // hourly gazettes.yml
+  drsc:      480,  //  4h scrape + 4h sync
+  cag:       300,  //  1h backfill + 4h sync
+  fc:        480,  //  4h scrape + 4h sync
+  bills:     480,  //  4h backfill + 4h sync
+  lc:        480,  //  4h scrape + 4h sync
+  debates:   360,  //  2h scrape + 4h sync
+  questions: 300,  //  1h scrape + 4h sync
+  gazettes:  300,  //  1h scrape + 4h sync
 };
 
 // Per-corpus source-data repository for the "View workflow runs" link
