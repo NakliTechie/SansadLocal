@@ -416,7 +416,7 @@ function renderResultsLine() {
   } else if (withText) {
     indexLine = `<span>Title search · <b>${withText}</b> bills with text · <a href="#" id="enableDeepLink" style="color:var(--accent)">enable deep search</a></span>`;
   }
-  el.innerHTML = (shown < total)
+  el.innerHTML = (shown > 0 && shown < total)
     ? `<div class="rl-primary">Showing <b>${shown}</b> of <b>${total}</b></div>`
     : '';
 
@@ -1072,11 +1072,12 @@ function renderSettingsSection(container) {
       <h3>Bills (Indian Parliament)</h3>
       <p>Bills are indexed via sansad.in's public legislation API and mirrored daily + every 4 hours (backfill). Full corpus: ${totalBills} bills (${(indexMeta?.shards?.length || 0)} shards). Currently ${withText} bills have extracted text.</p>
       <p style="margin-top:8px; font-size:0.82rem; color:var(--muted)">
-        ${meta?.last_update ? 'Mirror last updated ' + escapeHtml(meta.last_update) + '. ' : ''}
+        ${meta?.last_update ? _deps.ui.stalenessIndicatorHTML('bills', meta) + ' ' : ''}
         ${meta?.in_rate_limit_cooldown ? 'Currently in rate-limit cooldown — extractions resume next cron tick. ' : ''}
       </p>
     </div>
   `;
+  _deps.ui.bindStalenessIndicators(container);
 }
 
 function applySettingsFromUI() {

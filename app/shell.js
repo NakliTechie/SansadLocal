@@ -63,6 +63,135 @@ const CORPUS_DATA_BASE_URLS = {
   questions: 'https://sansadsaar-proceedings.naklitechie.com/',
 };
 
+// Per-corpus expected interval between data updates visible on the
+// live mirror, in minutes. Used by the staleness indicator in the
+// settings modal.
+//
+// This is the SCRAPE cadence + the CF-DEPLOY-SYNC cadence, because
+// scrape commits sit on `main` until the cf-sync workflow promotes
+// them to `cf-deploy` and CF rebuilds. The sync runs every 4 hours
+// (cf-sync.yml in each data repo), so even an hourly-scraped corpus
+// will only show new data on the mirror at most every ~4h. See
+// CONV.md "Multi-corpus derive in one repo" → "Audit by
+// meta.generated_at, not workflow run history" for the deeper
+// rationale.
+//
+// Effective cadence = scrape_cadence + 240 (sync lag).
+const CORPUS_CADENCE_MINUTES = {
+  drsc:      480,  //  4h scrape + 4h sync
+  cag:       300,  //  1h backfill + 4h sync
+  fc:        480,  //  4h scrape + 4h sync
+  bills:     480,  //  4h backfill + 4h sync
+  lc:        480,  //  4h scrape + 4h sync
+  debates:   360,  //  2h scrape + 4h sync
+  questions: 300,  //  1h scrape + 4h sync
+  gazettes:  300,  //  1h scrape + 4h sync
+};
+
+// Per-corpus source-data repository for the "View workflow runs" link
+// in the staleness indicator's expanded details.
+const CORPUS_REPO_URL = {
+  drsc:      'https://github.com/NakliTechie/parliamentwatch-data',
+  cag:       'https://github.com/NakliTechie/parliamentwatch-data',
+  fc:        'https://github.com/NakliTechie/parliamentwatch-data',
+  bills:     'https://github.com/NakliTechie/parliamentwatch-data',
+  lc:        'https://github.com/NakliTechie/parliamentwatch-data',
+  debates:   'https://github.com/NakliTechie/sansadsaar-proceedings-data',
+  questions: 'https://github.com/NakliTechie/sansadsaar-proceedings-data',
+  gazettes:  'https://github.com/NakliTechie/sansadsaar-gazettes',
+};
+
+// ── Staleness indicator helpers (used by each corpus's settings section) ──
+
+function humanAge(minutes) {
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${Math.round(minutes)} min ago`;
+  const hours = minutes / 60;
+  if (hours < 24) return `${hours < 10 ? hours.toFixed(1) : Math.round(hours)} h ago`;
+  const days = hours / 24;
+  return `${days < 10 ? days.toFixed(1) : Math.round(days)} d ago`;
+}
+
+function humanCadence(minutes) {
+  if (minutes < 60) return `every ${minutes} minutes`;
+  const hours = minutes / 60;
+  if (hours === 1) return 'every hour';
+  if (hours < 24) return `every ${hours} hours`;
+  return `every ${Math.round(hours / 24)} days`;
+}
+
+// Returns descriptor for a corpus's freshness given its meta.json.
+// level: 'fresh' | 'stale' | 'broken' | 'unknown'
+function freshnessFor(corpusId, meta) {
+  const cadence = CORPUS_CADENCE_MINUTES[corpusId];
+  const ts = meta?.generated_at || meta?.last_update;
+  if (!cadence || !ts) return { level: 'unknown', ageText: 'unknown' };
+  const ageMs = Date.now() - Date.parse(ts);
+  if (isNaN(ageMs) || ageMs < 0) return { level: 'unknown', ageText: 'unknown' };
+  const ageMin = ageMs / 60000;
+  let level;
+  if      (ageMin < cadence * 2) level = 'fresh';
+  else if (ageMin < cadence * 6) level = 'stale';
+  else                           level = 'broken';
+  return {
+    level,
+    ageText: humanAge(ageMin),
+    ageMinutes: ageMin,
+    cadenceMinutes: cadence,
+    cadenceText: humanCadence(cadence),
+    repoUrl: CORPUS_REPO_URL[corpusId] || null,
+    generatedAtIso: ts,
+  };
+}
+
+// HTML snippet for inline use in a corpus's settings "Data (...)" section.
+// Renders: ● Updated 4 h ago  (clickable to expand details panel).
+// Returns plain text when meta is missing.
+function stalenessIndicatorHTML(corpusId, meta) {
+  const f = freshnessFor(corpusId, meta);
+  if (f.level === 'unknown') {
+    return `<span class="staleness staleness-unknown"><span class="staleness-dot" aria-hidden="true"></span><span class="staleness-age">${escapeHtml(f.ageText)}</span></span>`;
+  }
+  const statusEmoji = f.level === 'fresh' ? '✓' : (f.level === 'stale' ? '⚠' : '✗');
+  const statusText  = f.level === 'fresh'
+    ? 'Fresh — within expected update window'
+    : f.level === 'stale'
+      ? `Overdue — last update is past the expected ${f.cadenceText.replace(/^every /, '')} window`
+      : `Likely broken — last update is far past the expected ${f.cadenceText.replace(/^every /, '')} window`;
+  const detailsId = `stalenessDetails-${corpusId}`;
+  const repoLink = f.repoUrl
+    ? `<a href="${f.repoUrl}/actions" target="_blank" rel="noopener">View workflow runs ↗</a>`
+    : '';
+  return `
+    <span class="staleness staleness-${f.level}" data-corpus="${escapeHtml(corpusId)}" data-details-id="${detailsId}" role="button" tabindex="0" aria-expanded="false" title="Click for details"><span class="staleness-dot" aria-hidden="true"></span><span class="staleness-age">Updated ${escapeHtml(f.ageText)}</span></span><span class="staleness-details" id="${detailsId}" hidden><span class="staleness-row"><b>Status:</b> ${statusEmoji} ${escapeHtml(statusText)}</span><span class="staleness-row"><b>Last update:</b> ${escapeHtml(f.generatedAtIso)}</span><span class="staleness-row"><b>Expected:</b> ${escapeHtml(f.cadenceText)}</span>${repoLink ? `<span class="staleness-row">${repoLink}</span>` : ''}</span>
+  `.trim();
+}
+
+// Wire click-to-expand behavior on staleness indicators inside `scope`
+// (default: document). Call AFTER inserting stalenessIndicatorHTML output
+// into the DOM. Safe to call multiple times — uses a sentinel attribute
+// so the listener doesn't double-bind.
+function bindStalenessIndicators(scope) {
+  const root = scope || document;
+  root.querySelectorAll('.staleness[data-details-id]').forEach(el => {
+    if (el.dataset.bound === '1') return;
+    el.dataset.bound = '1';
+    const toggle = () => {
+      const details = root.querySelector('#' + el.dataset.detailsId)
+                   || document.getElementById(el.dataset.detailsId);
+      if (!details) return;
+      const willShow = details.hasAttribute('hidden');
+      if (willShow) details.removeAttribute('hidden');
+      else          details.setAttribute('hidden', '');
+      el.setAttribute('aria-expanded', willShow ? 'true' : 'false');
+    };
+    el.addEventListener('click', toggle);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+  });
+}
+
 // Local-AI model registry. Multimodal uses AutoProcessor +
 // Gemma4ForConditionalGeneration; causal uses AutoTokenizer +
 // AutoModelForCausalLM. The 'type' field drives the worker's load path.
@@ -1114,6 +1243,12 @@ const deps = {
     closeModal,
     escapeHtml,
     debounce,
+    // Cron staleness indicator (Settings modal). See CONV.md
+    // "Multi-corpus derive in one repo" for the audit-by-staleness
+    // rationale and the cadence map at top-of-file.
+    stalenessIndicatorHTML,
+    bindStalenessIndicators,
+    freshnessFor,
   },
 
   // Which corpus is currently active in the shell. Each corpus uses this

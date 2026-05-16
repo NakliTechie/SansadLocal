@@ -382,7 +382,7 @@ function renderResultsLine() {
   } else {
     indexLine = `<span>Title search only · <b>${mirrorWithText}</b> reports with text · <a href="#" id="enableDeepLink" style="color:var(--accent)">enable deep search</a></span>`;
   }
-  el.innerHTML = (shown < total)
+  el.innerHTML = (shown > 0 && shown < total)
     ? `<div class="rl-primary">Showing <b>${shown}</b> of <b>${total}</b></div>`
     : '';
 
@@ -1071,11 +1071,12 @@ function renderSettingsSection(container) {
     <div class="settings-section">
       <h3>Data (Financial Committees)</h3>
       <p id="fcDataInfo">${meta
-        ? `Last updated ${escapeHtml(meta.generated_at)} · ${escapeHtml(String(meta.total_reports))} reports total · ${escapeHtml(String(meta.total_with_text))} with text · LSes ${escapeHtml((meta.lok_sabhas || []).join(', '))}`
+        ? `${_deps.ui.stalenessIndicatorHTML('fc', meta)} · ${escapeHtml(String(meta.total_reports))} reports total · ${escapeHtml(String(meta.total_with_text))} with text · LSes ${escapeHtml((meta.lok_sabhas || []).join(', '))}`
         : `Source: ${escapeHtml(_deps?.config?.dataBaseUrl || '')}fc/`}</p>
       <button class="sm" id="fcRefreshDataBtn">Refresh from mirror</button>
     </div>
   `;
+  _deps.ui.bindStalenessIndicators(container);
 
   document.getElementById('fcRefreshDataBtn').addEventListener('click', async () => {
     _deps.ui.toast('Refreshing FC…');

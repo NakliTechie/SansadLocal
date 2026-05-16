@@ -274,7 +274,7 @@ function renderResultsLine() {
   if (meta?.generated_at) {
     metaLine = `Mirror updated <b>${escapeHtml(formatLocalTimestamp(meta.generated_at))}</b>`;
   }
-  el.innerHTML = (shown < total)
+  el.innerHTML = (shown > 0 && shown < total)
     ? `<div class="rl-primary">Showing <b>${shown}</b> of <b>${total}</b></div>`
     : '';
 }
@@ -515,14 +515,23 @@ function switchReportTab(name) {
 
 function renderSettingsSection(container) {
   if (!container) return;
+  const meta = state.data.meta;
+  const totalsObj = meta?.totals || {};
+  const totalCount = (totalsObj.ls || 0) + (totalsObj.rs || 0);
   container.innerHTML = `
-    <h3>Parliamentary Questions</h3>
-    <p style="font-size:0.9rem;color:var(--text-muted);margin:0 0 8px">
-      SansadSaar shows questions as a searchable metadata corpus. The richer
-      per-MP and per-topic analytic experience for questions + debates lives
-      in <em>Netas Explorer</em> (coming soon).
-    </p>
+    <div class="settings-section">
+      <h3>Parliamentary Questions</h3>
+      <p style="font-size:0.9rem;color:var(--muted);margin:0 0 8px">
+        SansadSaar shows questions as a searchable metadata corpus. The richer
+        per-MP and per-topic analytic experience for questions + debates lives
+        in <em>Netas Explorer</em> (coming soon).
+      </p>
+      <p id="questionsDataInfo" style="font-size:0.82rem; color:var(--muted)">${meta
+        ? `${_deps.ui.stalenessIndicatorHTML('questions', meta)}${totalCount ? ` · ${totalCount.toLocaleString()} questions total` : ''}`
+        : `Source: ${escapeHtml(_deps?.config?.dataBaseUrl || '')}questions/`}</p>
+    </div>
   `;
+  _deps.ui.bindStalenessIndicators(container);
 }
 
 function applySettingsFromUI() { /* no settings to apply */ }

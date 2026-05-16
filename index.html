@@ -649,6 +649,54 @@ main {
 }
 .settings-row .with-btn input { flex: 1; }
 
+/* Cron-health staleness indicator inside each corpus's "Data (…)" section. */
+.staleness {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  padding: 1px 4px;
+  margin: 0 -4px 0 0;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+.staleness:hover  { background: var(--surface3); }
+.staleness:focus  { outline: 2px solid var(--accent); outline-offset: 1px; }
+.staleness-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.staleness-fresh   .staleness-dot { background: var(--green); }
+.staleness-stale   .staleness-dot { background: var(--amber); }
+.staleness-broken  .staleness-dot { background: var(--red);   }
+.staleness-unknown .staleness-dot { background: var(--muted); }
+.staleness-age { color: var(--text); }
+.staleness-stale  .staleness-age { color: var(--amber); }
+.staleness-broken .staleness-age { color: var(--red);   font-weight: 600; }
+.staleness-details {
+  display: block;            /* span used for valid <p>-descendant nesting */
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--surface2);
+  border-left: 3px solid var(--border-2);
+  border-radius: 4px;
+  font-size: 0.78rem;
+  color: var(--text);
+  line-height: 1.55;
+}
+/* `.staleness-details { display: block }` outranks the UA's
+   `[hidden] { display: none }` (class vs attribute, equal specificity but
+   UA cascades earlier). Re-assert with a class+attribute selector
+   (specificity 20 > 10) so the `hidden` attribute actually hides. */
+.staleness-details[hidden] { display: none; }
+.staleness-row { display: block; margin-bottom: 2px; }
+.staleness-row:last-child { margin-bottom: 0; }
+.staleness-details b { color: var(--muted); font-weight: 600; }
+.staleness-details a { color: var(--accent); }
+
 .status-pill {
   display: inline-flex;
   align-items: center;
